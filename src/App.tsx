@@ -98,6 +98,10 @@ export default function App() {
   const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
+      if (audioRef.current) {
+        audioRef.current.pause();
+        audioRef.current.currentTime = 0;
+      }
       const url = URL.createObjectURL(file);
       setCustomSound(url);
       if (audioRef.current) {
@@ -484,12 +488,15 @@ export default function App() {
                   <div className="flex items-center gap-2">
                     <button 
                       onClick={(e) => { e.stopPropagation(); togglePreview(); }}
-                      className="p-2 rounded-lg hover:bg-white/10 transition-all"
-                      style={{ color: themeStyles.accent }}
+                      className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-wider"
+                      style={{ color: themeStyles.accent, border: `1px solid ${themeStyles.accent}33` }}
                     >
-                      {isAudioPlaying ? <Pause size={16} /> : <Play size={16} />}
+                      {isAudioPlaying ? <Pause size={12} /> : <Play size={12} />}
+                      {isAudioPlaying ? 'Stop' : 'Preview'}
                     </button>
-                    <Upload size={18} style={{ color: themeStyles.accent }} />
+                    <div className="p-2 rounded-lg" style={{ color: themeStyles.accent }}>
+                      <Upload size={18} />
+                    </div>
                   </div>
                 </div>
 
