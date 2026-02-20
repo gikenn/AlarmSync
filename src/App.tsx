@@ -60,6 +60,7 @@ export default function App() {
   const [customSound, setCustomSound] = useState<string | null>(null);
   const [isAudioPlaying, setIsAudioPlaying] = useState(false);
   const [pendingSync, setPendingSync] = useState<boolean>(false);
+  const [offlineQueue, setOfflineQueue] = useState<{ type: 'CREATE' | 'UPDATE' | 'DELETE'; data: any }[]>([]);
   
   const socketRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -192,8 +193,32 @@ export default function App() {
   const syncWithServer = async () => {
     setPendingSync(true);
     try {
-      // Simple sync: fetch latest from server
-      // In a more complex app, we'd push local changes here
+      // Process offline queue
+      if (offlineQueue.length > 0) {
+        for (const action of offlineQueue) {
+          try {
+            if (action.type === 'CREATE') {
+              await fetch('/api/alarms', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(action.data),
+              });
+            } else if (action.type === 'UPDATE') {
+              await fetch(`/api/alarms/${action.data.id}`, {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ enabled: action.data.enabled }),
+              });
+            } else if (action.type === 'DELETE') {
+              await fetch(`/api/alarms/${action.data.id}`, { method: 'DELETE' });
+            }
+          } catch (e) {
+            console.error("Failed to sync individual action:", e);
+          }
+        }
+        setOfflineQueue([]);
+      }
+
       await fetchAlarms();
       addNotification(Date.now(), "Synced", "Connection restored. Alarms updated.");
     } catch (err) {
@@ -295,23 +320,26 @@ export default function App() {
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
       console.error('Offline mode: Alarm saved locally', err);
+      setOfflineQueue(prev => [...prev, { type: 'CREATE', data: { title: newAlarm.title, time: newAlarm.time } }]);
       addNotification(tempId, "Offline Mode", "Alarm saved locally. Will sync when online.");
     }
   };
 
   const toggleAlarm = async (id: number, enabled: boolean) => {
+    const newEnabled = !enabled;
     // Optimistic update
-    setAlarms(prev => prev.map(a => a.id === id ? { ...a, enabled: !enabled } : a));
+    setAlarms(prev => prev.map(a => a.id === id ? { ...a, enabled: newEnabled } : a));
 
     try {
       const res = await fetch(`/api/alarms/${id}`, {
         method: 'PATCH',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ enabled: !enabled }),
+        body: JSON.stringify({ enabled: newEnabled }),
       });
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
       console.error('Offline mode: Change saved locally', err);
+      setOfflineQueue(prev => [...prev, { type: 'UPDATE', data: { id, enabled: newEnabled } }]);
     }
   };
 
@@ -324,6 +352,7 @@ export default function App() {
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
       console.error('Offline mode: Deletion saved locally', err);
+      setOfflineQueue(prev => [...prev, { type: 'DELETE', data: { id } }]);
     }
   };
 
@@ -391,14 +420,14 @@ export default function App() {
     };
 
     const keyframes = [
-      { h: 0, bg: '#09090b', text: '#f4f4f5', accent: '#818cf8', card: 'rgba(24, 24, 27, 0.4)', secondary: 'rgba(113, 113, 122, 1)', button: '#4f46e5' },
-      { h: 5, bg: '#09090b', text: '#f4f4f5', accent: '#818cf8', card: 'rgba(24, 24, 27, 0.4)', secondary: 'rgba(113, 113, 122, 1)', button: '#4f46e5' },
-      { h: 7, bg: '#4c1d95', text: '#fff7ed', accent: '#fdba74', card: 'rgba(255, 255, 255, 0.1)', secondary: 'rgba(254, 215, 170, 0.6)', button: '#f97316' },
-      { h: 10, bg: '#f0f9ff', text: '#082f49', accent: '#0284c7', card: 'rgba(255, 255, 255, 1)', secondary: 'rgba(2, 132, 199, 0.6)', button: '#0284c7' },
-      { h: 16, bg: '#f0f9ff', text: '#082f49', accent: '#0284c7', card: 'rgba(255, 255, 255, 1)', secondary: 'rgba(2, 132, 199, 0.6)', button: '#0284c7' },
-      { h: 19, bg: '#78350f', text: '#fffbeb', accent: '#fbbf24', card: 'rgba(0, 0, 0, 0.3)', secondary: 'rgba(253, 230, 138, 0.5)', button: '#d97706' },
-      { h: 21, bg: '#09090b', text: '#f4f4f5', accent: '#818cf8', card: 'rgba(24, 24, 27, 0.4)', secondary: 'rgba(113, 113, 122, 1)', button: '#4f46e5' },
-      { h: 24, bg: '#09090b', text: '#f4f4f5', accent: '#818cf8', card: 'rgba(24, 24, 27, 0.4)', secondary: 'rgba(113, 113, 122, 1)', button: '#4f46e5' }
+      { h: 0, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
+      { h: 5, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
+      { h: 7, bg: '#2e1065', text: '#faf5ff', accent: '#fb923c', card: 'rgba(88, 28, 135, 0.4)', secondary: 'rgba(216, 180, 254, 0.7)', button: '#c2410c' },
+      { h: 10, bg: '#064e3b', text: '#ecfdf5', accent: '#10b981', card: 'rgba(6, 78, 59, 0.5)', secondary: 'rgba(110, 231, 183, 0.7)', button: '#059669' },
+      { h: 16, bg: '#064e3b', text: '#ecfdf5', accent: '#10b981', card: 'rgba(6, 78, 59, 0.5)', secondary: 'rgba(110, 231, 183, 0.7)', button: '#059669' },
+      { h: 19, bg: '#450a0a', text: '#fef2f2', accent: '#f59e0b', card: 'rgba(127, 29, 29, 0.4)', secondary: 'rgba(252, 165, 165, 0.7)', button: '#b91c1c' },
+      { h: 21, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
+      { h: 24, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' }
     ];
 
     const hour = currentTime.getHours() + currentTime.getMinutes() / 60;
@@ -416,7 +445,8 @@ export default function App() {
       secondary: lerpColor(prev.secondary, next.secondary, t),
       button: lerpColor(prev.button, next.button, t),
       header: lerpColor(prev.text, next.text, t),
-      input: lerpColor(prev.bg, next.bg, 0.5) // Slightly different for input
+      input: lerpColor(prev.bg, next.bg, 0.5),
+      glass: 'backdrop-blur-xl border border-white/10'
     };
   }, [currentTime]);
 
@@ -443,18 +473,18 @@ export default function App() {
               initial={{ opacity: 0, x: -20 }}
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: -20 }}
-              className="fixed inset-0 z-[110] p-6 flex flex-col gap-4"
+              className={`fixed inset-0 z-[110] p-8 flex flex-col gap-6 ${themeStyles.glass}`}
               style={{ backgroundColor: themeStyles.bg }}
             >
-              <div className="flex items-center justify-between mb-8">
-                <h2 className="text-xl font-bold">Settings</h2>
-                <button onClick={() => setShowMenu(false)} className="p-2 rounded-full hover:bg-white/10">
-                  <X size={24} />
+              <div className="flex items-center justify-between mb-10">
+                <h2 className="text-2xl font-black tracking-tighter">Settings</h2>
+                <button onClick={() => setShowMenu(false)} className="p-3 rounded-full hover:bg-white/10 active:scale-90 transition-all">
+                  <X size={28} />
                 </button>
               </div>
 
-              <div className="space-y-2">
-                <p className="text-[10px] font-bold uppercase tracking-widest mb-4" style={{ color: themeStyles.secondary }}>Device Controls</p>
+              <div className="space-y-3 overflow-y-auto pr-2 custom-scrollbar">
+                <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-6 opacity-40" style={{ color: themeStyles.text }}>Device Controls</p>
                 
                 <button 
                   onClick={() => {
@@ -464,26 +494,30 @@ export default function App() {
                       audioRef.current.currentTime = 0;
                     }
                   }}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
-                  style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
-                    <span className="font-medium">Alarm Sound</span>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      {soundEnabled ? <Volume2 size={20} /> : <VolumeX size={20} />}
+                    </div>
+                    <span className="font-bold text-sm">Alarm Sound</span>
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: soundEnabled ? themeStyles.accent : themeStyles.secondary }}>
+                  <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/5" style={{ color: soundEnabled ? themeStyles.accent : themeStyles.text + '44' }}>
                     {soundEnabled ? 'Enabled' : 'Muted'}
                   </span>
                 </button>
 
                 <div 
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer"
-                  style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all cursor-pointer hover:bg-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                   onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="flex items-center gap-3">
-                    <Music size={20} />
-                    <span className="font-medium">Custom Sound</span>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      <Music size={20} />
+                    </div>
+                    <span className="font-bold text-sm">Custom Sound</span>
                   </div>
                   <div className="flex items-center gap-2">
                     <button 
@@ -502,54 +536,62 @@ export default function App() {
 
                 <button 
                   onClick={() => { setShowConnectModal(true); setShowMenu(false); }}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
-                  style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    <Link size={20} />
-                    <span className="font-medium">Connect Device</span>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      <Link size={20} />
+                    </div>
+                    <span className="font-bold text-sm">Connect Device</span>
                   </div>
-                  <QrCode size={18} style={{ color: themeStyles.accent }} />
+                  <div className="p-2 rounded-lg" style={{ color: themeStyles.accent }}>
+                    <QrCode size={18} />
+                  </div>
                 </button>
 
                 <button 
                   onClick={() => { isConnected ? disconnect() : connectWebSocket(); }}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
-                  style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    {isConnected ? <WifiOff size={20} /> : <Wifi size={20} />}
-                    <span className="font-medium">Connection</span>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      {isConnected ? <WifiOff size={20} /> : <Wifi size={20} />}
+                    </div>
+                    <span className="font-bold text-sm">Connection</span>
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: isConnected ? '#10b981' : '#ef4444' }}>
+                  <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/5" style={{ color: isConnected ? '#10b981' : '#ef4444' }}>
                     {isConnected ? 'Online' : 'Offline'}
                   </span>
                 </button>
 
                 <button 
                   onClick={() => setIsMainDevice(!isMainDevice)}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
-                  style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    {isMainDevice ? <ShieldCheck size={20} /> : <Smartphone size={20} />}
-                    <span className="font-medium">Device Role</span>
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      {isMainDevice ? <ShieldCheck size={20} /> : <Smartphone size={20} />}
+                    </div>
+                    <span className="font-bold text-sm">Device Role</span>
                   </div>
-                  <span className="text-xs font-bold uppercase tracking-widest" style={{ color: themeStyles.accent }}>
+                  <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/5" style={{ color: themeStyles.accent }}>
                     {isMainDevice ? 'Main' : 'Receiver'}
                   </span>
                 </button>
 
-                <div className="pt-8">
+                <div className="pt-10">
                   <button 
                     onClick={() => {
                       localStorage.removeItem('sync_alarm_role');
                       window.location.reload();
                     }}
-                    className="w-full flex items-center justify-center gap-2 p-4 rounded-2xl border transition-all text-red-400 border-red-400/20 bg-red-400/5"
+                    className="w-full flex items-center justify-center gap-3 p-5 rounded-[2rem] border transition-all text-red-400 border-red-400/20 bg-red-400/5 hover:bg-red-400/10 active:scale-[0.98]"
                   >
                     <LogOut size={20} />
-                    <span className="font-bold">Reset Session</span>
+                    <span className="font-black uppercase tracking-widest text-xs">Reset Session</span>
                   </button>
                 </div>
               </div>
@@ -579,44 +621,44 @@ export default function App() {
               initial={{ opacity: 0 }}
               animate={{ opacity: 1 }}
               exit={{ opacity: 0 }}
-              className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/60 backdrop-blur-sm"
+              className="fixed inset-0 z-[120] flex items-center justify-center p-4 bg-black/80 backdrop-blur-md"
               onClick={() => setShowConnectModal(false)}
             >
               <motion.div 
                 initial={{ scale: 0.9, y: 20 }}
                 animate={{ scale: 1, y: 0 }}
                 exit={{ scale: 0.9, y: 20 }}
-                className="w-full max-w-sm p-8 rounded-[2.5rem] shadow-2xl border"
-                style={{ backgroundColor: themeStyles.bg, borderColor: themeStyles.secondary + '33' }}
+                className={`w-full max-w-sm p-10 rounded-[3rem] shadow-2xl ${themeStyles.glass}`}
+                style={{ backgroundColor: themeStyles.card }}
                 onClick={e => e.stopPropagation()}
               >
                 <div className="text-center">
-                  <div className="w-16 h-16 rounded-full mx-auto mb-6 flex items-center justify-center" style={{ backgroundColor: themeStyles.accent + '22', color: themeStyles.accent }}>
-                    <QrCode size={32} />
+                  <div className="w-20 h-20 rounded-3xl mx-auto mb-8 flex items-center justify-center shadow-inner" style={{ backgroundColor: themeStyles.accent + '22', color: themeStyles.accent }}>
+                    <QrCode size={40} />
                   </div>
-                  <h3 className="text-xl font-bold mb-2">Connect New Device</h3>
-                  <p className="text-sm mb-6" style={{ color: themeStyles.secondary }}>
+                  <h3 className="text-2xl font-black tracking-tighter mb-3">Connect Device</h3>
+                  <p className="text-xs font-medium mb-8 opacity-50 uppercase tracking-widest leading-relaxed">
                     Scan this QR code or open the URL on another device to sync.
                   </p>
                   
-                  <div className="bg-white p-4 rounded-3xl inline-block mb-6 shadow-inner border border-zinc-100">
+                  <div className="bg-white p-6 rounded-[2rem] inline-block mb-8 shadow-2xl border-4 border-white/10">
                     <QRCodeSVG 
                       value={window.location.href} 
                       size={180}
                       level="H"
                       includeMargin={false}
-                      fgColor={themeStyles.bg === 'bg-sky-50' ? '#082f49' : '#09090b'}
+                      fgColor="#020617"
                     />
                   </div>
 
-                  <div className="p-4 rounded-2xl mb-8 font-mono text-[10px] break-all border" style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}>
+                  <div className="p-4 rounded-2xl mb-8 font-mono text-[10px] break-all border border-white/5" style={{ backgroundColor: 'rgba(0,0,0,0.2)', color: themeStyles.text }}>
                     {window.location.href}
                   </div>
 
                   <button 
                     onClick={() => setShowConnectModal(false)}
-                    className="w-full py-4 rounded-2xl font-bold text-white transition-all"
-                    style={{ backgroundColor: themeStyles.button }}
+                    className="w-full py-4 rounded-2xl font-black uppercase tracking-widest text-xs transition-all hover:scale-[1.02] active:scale-[0.98]"
+                    style={{ backgroundColor: themeStyles.button, color: 'white' }}
                   >
                     Done
                   </button>
@@ -696,51 +738,51 @@ export default function App() {
           <motion.div 
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
-            className="mb-10 p-6 rounded-3xl border"
-            style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+            className={`mb-10 p-8 rounded-[2.5rem] ${themeStyles.glass}`}
+            style={{ backgroundColor: themeStyles.card }}
           >
-            <div className="flex items-center justify-between mb-4">
-              <h2 className="text-sm font-bold uppercase tracking-widest" style={{ color: themeStyles.secondary }}>Device Management</h2>
+            <div className="flex items-center justify-between mb-6">
+              <h2 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50" style={{ color: themeStyles.text }}>Device Management</h2>
               <button 
                 onClick={() => setShowConnectModal(true)}
-                className="flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-bold uppercase tracking-wider transition-all hover:scale-105"
+                className="flex items-center gap-2 px-4 py-2 rounded-xl text-[10px] font-black uppercase tracking-widest transition-all hover:scale-105 shadow-lg"
                 style={{ backgroundColor: themeStyles.accent, color: themeStyles.bg }}
               >
                 <Plus size={12} /> Add Device
               </button>
             </div>
-            <div className="space-y-2">
+            <div className="space-y-3">
               {connectedDevices.map((device, idx) => (
                 <div 
                   key={device.id + idx}
-                  className="flex items-center justify-between p-3 rounded-2xl border"
-                  style={{ backgroundColor: themeStyles.bg, borderColor: themeStyles.secondary + '11' }}
+                  className="flex items-center justify-between p-4 rounded-2xl border border-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
                 >
-                  <div className="flex items-center gap-3">
-                    <div className="p-2 rounded-lg" style={{ backgroundColor: themeStyles.card }}>
-                      {device.role === 'main' ? <ShieldCheck size={14} style={{ color: themeStyles.accent }} /> : <Smartphone size={14} style={{ color: themeStyles.secondary }} />}
+                  <div className="flex items-center gap-4">
+                    <div className="p-3 rounded-xl bg-white/5">
+                      {device.role === 'main' ? <ShieldCheck size={16} style={{ color: themeStyles.accent }} /> : <Smartphone size={16} style={{ color: themeStyles.secondary }} />}
                     </div>
                     <div>
-                      <p className="text-[10px] font-bold uppercase tracking-widest" style={{ color: themeStyles.header }}>
+                      <p className="text-[10px] font-black uppercase tracking-[0.2em]" style={{ color: themeStyles.header }}>
                         {device.role} {device.id === myClientId ? '(You)' : ''}
                       </p>
-                      <p className="text-[8px] opacity-50 font-mono">{device.id}</p>
+                      <p className="text-[8px] opacity-40 font-mono tracking-tighter">{device.id}</p>
                     </div>
                   </div>
                   
                   {isMainDevice && device.id !== myClientId && (
                     <button 
                       onClick={() => kickDevice(device.id)}
-                      className="p-2 hover:bg-red-400/10 rounded-lg transition-all text-red-400"
+                      className="p-2.5 hover:bg-red-500/20 rounded-xl transition-all text-red-400/60 hover:text-red-400"
                       title="Remove Device"
                     >
-                      <LogOut size={14} />
+                      <LogOut size={16} />
                     </button>
                   )}
                 </div>
               ))}
               {connectedDevices.length <= 1 && (
-                <p className="text-[10px] italic text-center py-2" style={{ color: themeStyles.secondary }}>No other devices connected.</p>
+                <p className="text-[10px] font-medium italic text-center py-4 opacity-40" style={{ color: themeStyles.text }}>No other devices connected.</p>
               )}
             </div>
           </motion.div>
@@ -751,30 +793,30 @@ export default function App() {
             initial={{ opacity: 0, y: 20 }}
             animate={{ opacity: 1, y: 0 }}
             onSubmit={addAlarm} 
-            className="mb-10 border p-6 rounded-3xl"
-            style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+            className={`mb-10 p-8 rounded-[2.5rem] ${themeStyles.glass}`}
+            style={{ backgroundColor: themeStyles.card }}
           >
-            <h2 className="text-sm font-bold uppercase tracking-widest mb-4" style={{ color: themeStyles.secondary }}>Set New Alarm</h2>
+            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] mb-6 opacity-50" style={{ color: themeStyles.text }}>Set New Alarm</h2>
             <div className="flex flex-col gap-4">
               <input
                 type="text"
                 value={newAlarmTitle}
                 onChange={(e) => setNewAlarmTitle(e.target.value)}
                 placeholder="Alarm Label (e.g. Morning Meeting)"
-                className="rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all text-sm"
-                style={{ backgroundColor: themeStyles.bg, borderColor: themeStyles.secondary + '33', color: themeStyles.text }}
+                className="rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all text-sm border border-white/5"
+                style={{ backgroundColor: 'rgba(0,0,0,0.2)', color: themeStyles.text }}
               />
               <div className="flex gap-3">
                 <input
                   type="time"
                   value={newAlarmTime}
                   onChange={(e) => setNewAlarmTime(e.target.value)}
-                  className="flex-1 rounded-xl px-4 py-3 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all text-sm"
-                  style={{ backgroundColor: themeStyles.bg, borderColor: themeStyles.secondary + '33', color: themeStyles.text }}
+                  className="flex-1 rounded-2xl px-6 py-4 focus:outline-none focus:ring-2 focus:ring-white/20 transition-all text-sm border border-white/5"
+                  style={{ backgroundColor: 'rgba(0,0,0,0.2)', color: themeStyles.text }}
                 />
                 <button 
                   type="submit"
-                  className="text-white px-6 rounded-xl font-bold transition-all flex items-center gap-2"
+                  className="text-white px-8 rounded-2xl font-black transition-all flex items-center gap-2 hover:scale-[1.02] active:scale-[0.98] shadow-lg"
                   style={{ backgroundColor: themeStyles.button }}
                 >
                   <Plus size={18} /> SET
@@ -784,20 +826,66 @@ export default function App() {
           </motion.form>
         )}
 
-        <div className="space-y-4">
-          <div className="flex items-center justify-between mb-2 px-2">
-            <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: themeStyles.secondary }}>Active Alarms</h2>
-            <span className="text-[10px] px-2 py-0.5 rounded-full border" style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33', color: themeStyles.secondary }}>
+        {alarms.filter(a => a.enabled).length > 0 && (
+          <motion.div
+            initial={{ opacity: 0, scale: 0.95 }}
+            animate={{ opacity: 1, scale: 1 }}
+            className={`mb-10 p-10 rounded-[3rem] flex flex-col items-center text-center relative overflow-hidden ${themeStyles.glass}`}
+            style={{ 
+              backgroundColor: themeStyles.card, 
+              boxShadow: `0 30px 60px -12px ${themeStyles.bg}cc, 0 18px 36px -18px rgba(0,0,0,0.3)`
+            }}
+          >
+            <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
+            
+            <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 opacity-50" style={{ color: themeStyles.text }}>
+              Next Scheduled Alert
+            </p>
+            
+            {(() => {
+              const nextAlarm = [...alarms]
+                .filter(a => a.enabled)
+                .sort((a, b) => {
+                  const getMs = (time: string) => {
+                    const [h, m] = time.split(':').map(Number);
+                    const d = new Date(currentTime);
+                    d.setHours(h, m, 0, 0);
+                    if (d < currentTime) d.setDate(d.getDate() + 1);
+                    return d.getTime();
+                  };
+                  return getMs(a.time) - getMs(b.time);
+                })[0];
+
+              if (!nextAlarm) return null;
+
+              return (
+                <>
+                  <h2 className="text-6xl font-mono font-bold tracking-tighter mb-1" style={{ color: themeStyles.header }}>
+                    {getCountdown(nextAlarm.time)}
+                  </h2>
+                  <p className="text-sm font-medium opacity-60 uppercase tracking-widest">
+                    UNTIL {nextAlarm.title} ({nextAlarm.time})
+                  </p>
+                </>
+              );
+            })()}
+          </motion.div>
+        )}
+
+        <div className="space-y-6">
+          <div className="flex items-center justify-between mb-4 px-4">
+            <h2 className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50" style={{ color: themeStyles.text }}>Active Alarms</h2>
+            <span className="text-[10px] px-3 py-1 rounded-full border border-white/10 font-black tracking-widest" style={{ backgroundColor: themeStyles.card, color: themeStyles.text }}>
               {alarms.length} TOTAL
             </span>
           </div>
 
           {loading ? (
-            <div className="flex justify-center py-12">
-              <Loader2 className="animate-spin" style={{ color: themeStyles.secondary }} />
+            <div className="flex justify-center py-20">
+              <Loader2 className="animate-spin opacity-20" size={32} style={{ color: themeStyles.text }} />
             </div>
           ) : (
-            <div className="space-y-3">
+            <div className="space-y-4">
               <AnimatePresence mode="popLayout">
                 {alarms.map((alarm) => {
                   const isTriggering = triggeringAlarms.has(alarm.id);
@@ -817,15 +905,15 @@ export default function App() {
                             : 'none'
                       }}
                       exit={{ opacity: 0, scale: 0.95 }}
-                      className={`group relative border rounded-2xl p-5 transition-all ${!alarm.enabled ? 'opacity-40 grayscale' : ''} ${isTriggering ? 'ring-2' : isWarning ? 'ring-1' : ''}`}
+                      className={`group relative rounded-[2rem] p-6 transition-all ${themeStyles.glass} ${!alarm.enabled ? 'opacity-30 grayscale' : ''} ${isTriggering ? 'ring-4' : isWarning ? 'ring-2' : ''}`}
                       style={{ 
                         backgroundColor: themeStyles.card, 
-                        borderColor: isTriggering ? themeStyles.accent : isWarning ? themeStyles.accent + '66' : themeStyles.secondary + '33',
-                        ringColor: themeStyles.accent
+                        ringColor: themeStyles.accent,
+                        boxShadow: isTriggering ? `0 0 40px ${themeStyles.accent}44` : 'none'
                       }}
                     >
                       <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-5">
+                        <div className="flex items-center gap-6">
                           <motion.div 
                             animate={isTriggering ? { 
                               x: [0, -2, 2, -2, 2, 0],
@@ -841,43 +929,43 @@ export default function App() {
                               repeat: Infinity,
                               duration: 2
                             } : {}}
-                            className="p-3 rounded-xl" 
-                            style={{ backgroundColor: alarm.enabled ? themeStyles.accent + '33' : themeStyles.bg, color: alarm.enabled ? themeStyles.accent : themeStyles.secondary }}
+                            className="p-4 rounded-2xl shadow-inner" 
+                            style={{ backgroundColor: alarm.enabled ? themeStyles.accent + '22' : 'rgba(0,0,0,0.2)', color: alarm.enabled ? themeStyles.accent : themeStyles.text + '44' }}
                           >
-                            <Clock size={24} className={isTriggering ? 'animate-pulse' : ''} />
+                            <Clock size={28} className={isTriggering ? 'animate-pulse' : ''} />
                           </motion.div>
                           <div>
-                            <div className="flex items-baseline gap-2">
-                              <h3 className="text-2xl font-mono font-bold tracking-tighter" style={{ color: themeStyles.header }}>
+                            <div className="flex items-baseline gap-3">
+                              <h3 className="text-3xl font-mono font-black tracking-tighter" style={{ color: themeStyles.header }}>
                                 {alarm.time}
                               </h3>
                               {alarm.enabled && !isTriggering && (
-                                <span className="text-[10px] font-bold font-mono opacity-50" style={{ color: themeStyles.accent }}>
+                                <span className="text-[10px] font-black font-mono opacity-40 tracking-widest" style={{ color: themeStyles.accent }}>
                                   IN {getCountdown(alarm.time)}
                                 </span>
                               )}
                             </div>
-                            <p className="text-xs font-medium uppercase tracking-wide" style={{ color: themeStyles.secondary }}>
+                            <p className="text-[10px] font-black uppercase tracking-[0.2em] opacity-40" style={{ color: themeStyles.text }}>
                               {alarm.title}
                             </p>
                           </div>
                         </div>
 
-                        <div className="flex items-center gap-2">
+                        <div className="flex items-center gap-3">
                           {isTriggering && (
                             <button 
                               onClick={() => snoozeAlarm(alarm.id)}
-                              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105"
+                              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black tracking-widest transition-all hover:scale-105 shadow-xl"
                               style={{ backgroundColor: themeStyles.accent, color: themeStyles.bg }}
                             >
                               <Coffee size={14} /> SNOOZE
                             </button>
                           )}
-                          {isWarning && !isTriggering && (
+                          {!isMainDevice && alarm.enabled && !isTriggering && (
                             <button 
                               onClick={() => toggleAlarm(alarm.id, true)}
-                              className="flex items-center gap-2 px-3 py-2 rounded-xl text-xs font-bold transition-all hover:scale-105 border"
-                              style={{ borderColor: themeStyles.accent + '44', color: themeStyles.accent }}
+                              className="flex items-center gap-2 px-4 py-2.5 rounded-2xl text-[10px] font-black tracking-widest transition-all hover:scale-105 border border-white/10"
+                              style={{ backgroundColor: 'rgba(255,255,255,0.05)', color: themeStyles.accent }}
                             >
                               <BellOff size={14} /> SILENCE
                             </button>
@@ -885,24 +973,24 @@ export default function App() {
                           {isMainDevice ? (
                             <button 
                               onClick={() => toggleAlarm(alarm.id, alarm.enabled)}
-                              className="p-2 rounded-lg transition-all hover:bg-white/10"
-                              style={{ color: alarm.enabled ? themeStyles.accent : themeStyles.secondary }}
+                              className="p-3 rounded-xl transition-all hover:bg-white/10 active:scale-90"
+                              style={{ color: alarm.enabled ? themeStyles.accent : themeStyles.text + '22' }}
                             >
-                              {alarm.enabled ? <Bell size={20} /> : <BellOff size={20} />}
+                              {alarm.enabled ? <Bell size={22} /> : <BellOff size={22} />}
                             </button>
                           ) : (
-                            <div className="p-2" style={{ color: alarm.enabled ? themeStyles.accent : themeStyles.secondary }}>
-                              {alarm.enabled ? <Bell size={20} /> : <BellOff size={20} />}
+                            <div className="p-3 opacity-20" style={{ color: alarm.enabled ? themeStyles.accent : themeStyles.text }}>
+                              {alarm.enabled ? <Bell size={22} /> : <BellOff size={22} />}
                             </div>
                           )}
                           
                           {isMainDevice && (
                             <button 
                               onClick={() => deleteAlarm(alarm.id)}
-                              className="p-2 hover:text-red-400 hover:bg-red-400/10 rounded-lg transition-all"
-                              style={{ color: themeStyles.secondary }}
+                              className="p-3 hover:text-red-400 hover:bg-red-400/10 rounded-xl transition-all active:scale-90"
+                              style={{ color: themeStyles.text + '22' }}
                             >
-                              <Trash2 size={20} />
+                              <Trash2 size={22} />
                             </button>
                           )}
                         </div>
@@ -911,7 +999,7 @@ export default function App() {
                         <motion.div 
                           initial={{ scaleX: 0 }}
                           animate={{ scaleX: 1 }}
-                          className="absolute bottom-0 left-0 right-0 h-1 origin-left rounded-b-2xl"
+                          className="absolute bottom-0 left-0 right-0 h-1.5 origin-left rounded-b-[2rem]"
                           style={{ backgroundColor: themeStyles.accent }}
                         />
                       )}
@@ -921,9 +1009,9 @@ export default function App() {
               </AnimatePresence>
 
               {alarms.length === 0 && (
-                <div className="text-center py-16 border-2 border-dashed rounded-[2rem]" style={{ borderColor: themeStyles.secondary + '33' }}>
-                  <AlertTriangle className="mx-auto mb-3" size={32} style={{ color: themeStyles.secondary }} />
-                  <p className="text-sm font-medium" style={{ color: themeStyles.secondary }}>No alarms scheduled.</p>
+                <div className={`text-center py-24 rounded-[3rem] ${themeStyles.glass}`} style={{ backgroundColor: themeStyles.card }}>
+                  <AlertTriangle className="mx-auto mb-4 opacity-20" size={48} style={{ color: themeStyles.text }} />
+                  <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-30" style={{ color: themeStyles.text }}>No alarms scheduled.</p>
                 </div>
               )}
             </div>

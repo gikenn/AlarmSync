@@ -3,87 +3,10 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-
-    <!-- ─── Primary Meta ─────────────────────────────────────── -->
-    <title>AlarmSync — Wake Up Together</title>
-    <meta name="description" content="Shared alarms for families, teams, and groups. Set one alarm on your device — everyone connected gets it instantly." />
-    <meta name="author" content="gikenn" />
-    <meta name="keywords" content="alarm, sync, group alarm, family alarm, team alarm, shared alarm, AlarmSync" />
-
-    <!-- ─── Open Graph (WhatsApp, LinkedIn, Facebook previews) ── -->
-    <meta property="og:type"        content="website" />
-    <meta property="og:url"         content="https://ai.studio/apps/3b91393c-c6ed-4d16-ac29-c506ad5177bd" />
-    <meta property="og:title"       content="AlarmSync — Wake Up Together" />
-    <meta property="og:description" content="One alarm. Every device. No friction. Built for families, teams, and groups." />
-    <meta property="og:image"       content="/og-image.png" />
-
-    <!-- ─── Twitter Card ─────────────────────────────────────── -->
-    <meta name="twitter:card"        content="summary_large_image" />
-    <meta name="twitter:title"       content="AlarmSync — Wake Up Together" />
-    <meta name="twitter:description" content="One alarm. Every device. No friction." />
-    <meta name="twitter:image"       content="/og-image.png" />
-
-    <!-- ─── Favicon ──────────────────────────────────────────── -->
-    <link rel="icon" type="image/svg+xml" href="/favicon.svg" />
-    <link rel="apple-touch-icon"          href="/apple-touch-icon.png" />
-
-    <!-- ─── Fonts ────────────────────────────────────────────── -->
-    <link rel="preconnect" href="https://fonts.googleapis.com" />
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
-    <link
-      href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Mono:wght@300;400;500&display=swap"
-      rel="stylesheet"
-    />
-
-    <!-- ─── Theme Color (mobile browser chrome) ──────────────── -->
-    <meta name="theme-color" content="#0a0a0f" />
-
-    <!-- ─── Pre-load critical CSS vars so there's no flash ───── -->
-    <style>
-      :root {
-        --bg:      #0a0a0f;
-        --accent:  #ff5f3f;
-        --text:    #f0eff8;
-      }
-
-      /* Prevent white flash before React hydrates */
-      html, body {
-        background-color: var(--bg);
-        color: var(--text);
-        margin: 0;
-        padding: 0;
-        font-family: 'Syne', sans-serif;
-      }
-
-      /* Loading spinner shown before React mounts */
-      #root:empty::after {
-        content: '';
-        display: block;
-        width: 36px;
-        height: 36px;
-        margin: 48vh auto 0;
-        border: 2px solid rgba(255, 95, 63, 0.2);
-        border-top-color: var(--accent);
-        border-radius: 50%;
-        animation: spin 0.7s linear infinite;
-      }
-
-      @keyframes spin {
-        to { transform: rotate(360deg); }
-      }
-    </style>
+    <title>AI Task Manager</title>
   </head>
-
   <body>
-    <!--
-    ╔══════════════════════════════════════════╗
-    ║           AlarmSync by @gikenn           ║
-    ║   github.com/gikenn  |  Gemini API + SQL ║
-    ╚══════════════════════════════════════════╝
-    -->
     <div id="root"></div>
-
-    <!-- React / Vite entry point — do not remove -->
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
