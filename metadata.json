@@ -1,0 +1,5 @@
+{
+  "name": "AlarmSync",
+  "description": "A real-time synchronized alarm system where a main device sets alerts for all connected receivers.",
+  "requestFramePermissions": []
+}
