@@ -108,7 +108,7 @@ export default function App() {
   };
 
   useEffect(() => {
-    const interval = setInterval(() => setCurrentTime(new Date()), 10000);
+    const interval = setInterval(() => setCurrentTime(new Date()), 1000);
     return () => clearInterval(interval);
   }, []);
 
@@ -341,6 +341,26 @@ export default function App() {
     }
   };
 
+  const getCountdown = (alarmTime: string) => {
+    const now = currentTime;
+    const [h, m] = alarmTime.split(':').map(Number);
+    const target = new Date(now);
+    target.setHours(h, m, 0, 0);
+
+    if (target < now) {
+      target.setDate(target.getDate() + 1);
+    }
+
+    const diff = target.getTime() - now.getTime();
+    const hours = Math.floor(diff / 3600000);
+    const mins = Math.floor((diff % 3600000) / 60000);
+    const secs = Math.floor((diff % 60000) / 1000);
+
+    if (hours > 0) return `${hours}h ${mins}m`;
+    if (mins > 0) return `${mins}m ${secs}s`;
+    return `${secs}s`;
+  };
+
   const themeStyles = React.useMemo(() => {
     const lerp = (a: number, b: number, t: number) => a + (b - a) * t;
     const lerpColor = (c1: string, c2: string, t: number) => {
@@ -452,10 +472,10 @@ export default function App() {
                   </span>
                 </button>
 
-                <button 
-                  onClick={() => fileInputRef.current?.click()}
-                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all"
+                <div 
+                  className="w-full flex items-center justify-between p-4 rounded-2xl border transition-all cursor-pointer"
                   style={{ backgroundColor: themeStyles.card, borderColor: themeStyles.secondary + '33' }}
+                  onClick={() => fileInputRef.current?.click()}
                 >
                   <div className="flex items-center gap-3">
                     <Music size={20} />
@@ -471,7 +491,7 @@ export default function App() {
                     </button>
                     <Upload size={18} style={{ color: themeStyles.accent }} />
                   </div>
-                </button>
+                </div>
 
                 <button 
                   onClick={() => { setShowConnectModal(true); setShowMenu(false); }}
@@ -820,9 +840,16 @@ export default function App() {
                             <Clock size={24} className={isTriggering ? 'animate-pulse' : ''} />
                           </motion.div>
                           <div>
-                            <h3 className="text-2xl font-mono font-bold tracking-tighter" style={{ color: themeStyles.header }}>
-                              {alarm.time}
-                            </h3>
+                            <div className="flex items-baseline gap-2">
+                              <h3 className="text-2xl font-mono font-bold tracking-tighter" style={{ color: themeStyles.header }}>
+                                {alarm.time}
+                              </h3>
+                              {alarm.enabled && !isTriggering && (
+                                <span className="text-[10px] font-bold font-mono opacity-50" style={{ color: themeStyles.accent }}>
+                                  IN {getCountdown(alarm.time)}
+                                </span>
+                              )}
+                            </div>
                             <p className="text-xs font-medium uppercase tracking-wide" style={{ color: themeStyles.secondary }}>
                               {alarm.title}
                             </p>
