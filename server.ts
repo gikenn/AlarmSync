@@ -1,6 +1,5 @@
 import express from 'express';
 import { createServer as createViteServer } from 'vite';
-import Database from 'better-sqlite3';
 import dotenv from 'dotenv';
 import path from 'path';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -8,16 +7,80 @@ import { createServer } from 'http';
 
 dotenv.config();
 
-const db = new Database('alarms.db');
-db.exec(`
-  CREATE TABLE IF NOT EXISTS alarms (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    title TEXT NOT NULL,
-    time TEXT NOT NULL,
-    enabled BOOLEAN DEFAULT 1,
-    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-  )
-`);
+interface AlarmRecord {
+  id: number;
+  title: string;
+  time: string;
+  enabled: boolean | number;
+  created_at: string;
+}
+
+// In-memory data store replacing native sqlite3 for cloud container compatibility
+let alarmsTable: AlarmRecord[] = [
+  { id: 1, title: 'Morning Wakeup', time: '07:30', enabled: 1, created_at: new Date().toISOString() },
+  { id: 2, title: 'Daily Standup', time: '09:30', enabled: 1, created_at: new Date().toISOString() }
+];
+let nextAlarmId = 3;
+
+const db = {
+  exec: (_sql: string) => {},
+  prepare: (sql: string) => {
+    return {
+      all: (..._args: any[]) => {
+        if (sql.includes('SELECT * FROM alarms')) {
+          return [...alarmsTable]
+            .map(a => ({ ...a, enabled: Boolean(a.enabled) }))
+            .sort((a, b) => a.time.localeCompare(b.time));
+        }
+        return [];
+      },
+      get: (id: any) => {
+        const numId = Number(id);
+        const item = alarmsTable.find(a => a.id === numId);
+        return item ? { ...item, enabled: Boolean(item.enabled) } : null;
+      },
+      run: (...args: any[]) => {
+        if (sql.includes('INSERT INTO alarms')) {
+          const [title, time] = args;
+          const newAlarm: AlarmRecord = {
+            id: nextAlarmId++,
+            title,
+            time,
+            enabled: 1,
+            created_at: new Date().toISOString()
+          };
+          alarmsTable.push(newAlarm);
+          return { lastInsertRowid: newAlarm.id, changes: 1 };
+        }
+        if (sql.includes('UPDATE alarms SET enabled = ?')) {
+          const [enabled, id] = args;
+          const target = alarmsTable.find(a => a.id === Number(id));
+          if (target) {
+            target.enabled = enabled ? 1 : 0;
+            return { changes: 1 };
+          }
+          return { changes: 0 };
+        }
+        if (sql.includes('UPDATE alarms SET time = ?')) {
+          const [time, id] = args;
+          const target = alarmsTable.find(a => a.id === Number(id));
+          if (target) {
+            target.time = time;
+            return { changes: 1 };
+          }
+          return { changes: 0 };
+        }
+        if (sql.includes('DELETE FROM alarms')) {
+          const [id] = args;
+          const countBefore = alarmsTable.length;
+          alarmsTable = alarmsTable.filter(a => a.id !== Number(id));
+          return { changes: countBefore - alarmsTable.length };
+        }
+        return { changes: 0, lastInsertRowid: 0 };
+      }
+    };
+  }
+};
 
 async function startServer() {
   const app = express();
@@ -28,6 +91,23 @@ async function startServer() {
   const clients = new Map<string, { role: string; id: string }>();
 
   app.use(express.json());
+
+  // Enable CORS for all incoming client requests
+  app.use((req, res, next) => {
+    res.setHeader('Access-Control-Allow-Origin', '*');
+    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
+    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    if (req.method === 'OPTIONS') {
+      res.sendStatus(204);
+      return;
+    }
+    next();
+  });
+
+  // Health check endpoint
+  app.get('/api/health', (req, res) => {
+    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+  });
 
   // WebSocket broadcast helper
   const broadcast = (data: any) => {

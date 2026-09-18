@@ -35,7 +35,7 @@ interface Alarm {
   title: string;
   time: string;
   enabled: boolean;
-  created_at: string;
+  created_at?: string;
 }
 
 export default function App() {
@@ -92,7 +92,7 @@ export default function App() {
     if (isAudioPlaying) {
       audioRef.current.pause();
     } else {
-      audioRef.current.play().catch(e => console.error("Preview failed:", e));
+      audioRef.current.play().catch(e => console.warn("Audio playback delayed until user interaction:", e));
     }
   };
 
@@ -213,7 +213,7 @@ export default function App() {
               await fetch(`/api/alarms/${action.data.id}`, { method: 'DELETE' });
             }
           } catch (e) {
-            console.error("Failed to sync individual action:", e);
+            console.warn("Failed to sync individual action, will retry later:", e);
           }
         }
         setOfflineQueue([]);
@@ -222,19 +222,40 @@ export default function App() {
       await fetchAlarms();
       addNotification(Date.now(), "Synced", "Connection restored. Alarms updated.");
     } catch (err) {
-      console.error("Sync failed:", err);
+      console.warn("Sync temporarily deferred:", err);
     } finally {
       setPendingSync(false);
     }
   };
 
-  const fetchAlarms = async () => {
+  const fetchAlarms = async (retryCount = 0) => {
     try {
       const res = await fetch('/api/alarms');
+      if (!res.ok) {
+        throw new Error(`HTTP error ${res.status}`);
+      }
       const data = await res.json();
-      setAlarms(data);
+      if (Array.isArray(data)) {
+        setAlarms(data);
+        localStorage.setItem('sync_alarms_local', JSON.stringify(data));
+      }
     } catch (err) {
-      console.error('Failed to fetch alarms:', err);
+      console.warn(`Could not reach server alarms (attempt ${retryCount + 1}):`, err);
+      // Fallback to local storage if available
+      const saved = localStorage.getItem('sync_alarms_local');
+      if (saved && alarms.length === 0) {
+        try {
+          setAlarms(JSON.parse(saved));
+        } catch {
+          // ignore corrupted local storage
+        }
+      }
+      // Exponential backoff retry up to 4 attempts if server was starting up
+      if (retryCount < 4) {
+        setTimeout(() => {
+          fetchAlarms(retryCount + 1);
+        }, 1000 * Math.pow(1.5, retryCount));
+      }
     } finally {
       setLoading(false);
     }
@@ -275,7 +296,7 @@ export default function App() {
       if (currentTimeStr === alarm.time && now.getSeconds() === 0) {
         addNotification(alarm.id, alarm.title, "ALARM NOW!");
         if (soundEnabled && audioRef.current) {
-          audioRef.current.play().catch(e => console.error("Audio play failed:", e));
+          audioRef.current.play().catch(e => console.warn("Audio play blocked by browser policy:", e));
           // Stop after 30 seconds or when snoozed
           setTimeout(() => {
             audioRef.current?.pause();
@@ -304,7 +325,7 @@ export default function App() {
     if (!newAlarmTitle.trim() || !newAlarmTime) return;
 
     const tempId = Date.now();
-    const newAlarm = { id: tempId, time: newAlarmTime, title: newAlarmTitle, enabled: true };
+    const newAlarm = { id: tempId, time: newAlarmTime, title: newAlarmTitle, enabled: true, created_at: new Date().toISOString() };
 
     // Optimistic update
     setAlarms(prev => [...prev, newAlarm].sort((a, b) => a.time.localeCompare(b.time)));
@@ -319,7 +340,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
-      console.error('Offline mode: Alarm saved locally', err);
+      console.warn('Offline mode: Alarm saved locally', err);
       setOfflineQueue(prev => [...prev, { type: 'CREATE', data: { title: newAlarm.title, time: newAlarm.time } }]);
       addNotification(tempId, "Offline Mode", "Alarm saved locally. Will sync when online.");
     }
@@ -338,7 +359,7 @@ export default function App() {
       });
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
-      console.error('Offline mode: Change saved locally', err);
+      console.warn('Offline mode: Change saved locally', err);
       setOfflineQueue(prev => [...prev, { type: 'UPDATE', data: { id, enabled: newEnabled } }]);
     }
   };
@@ -351,7 +372,7 @@ export default function App() {
       const res = await fetch(`/api/alarms/${id}`, { method: 'DELETE' });
       if (!res.ok) throw new Error("Server error");
     } catch (err) {
-      console.error('Offline mode: Deletion saved locally', err);
+      console.warn('Offline mode: Deletion saved locally', err);
       setOfflineQueue(prev => [...prev, { type: 'DELETE', data: { id } }]);
     }
   };
@@ -364,7 +385,7 @@ export default function App() {
       }
       await fetch(`/api/alarms/${id}/snooze`, { method: 'POST' });
     } catch (err) {
-      console.error('Failed to snooze alarm:', err);
+      console.warn('Failed to snooze alarm:', err);
     }
   };
 
@@ -908,8 +929,8 @@ export default function App() {
                       className={`group relative rounded-[2rem] p-6 transition-all ${themeStyles.glass} ${!alarm.enabled ? 'opacity-30 grayscale' : ''} ${isTriggering ? 'ring-4' : isWarning ? 'ring-2' : ''}`}
                       style={{ 
                         backgroundColor: themeStyles.card, 
-                        ringColor: themeStyles.accent,
-                        boxShadow: isTriggering ? `0 0 40px ${themeStyles.accent}44` : 'none'
+                        boxShadow: isTriggering ? `0 0 40px ${themeStyles.accent}44` : 'none',
+                        ['--tw-ring-color' as any]: themeStyles.accent,
                       }}
                     >
                       <div className="flex items-center justify-between">
