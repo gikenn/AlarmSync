@@ -169,15 +169,21 @@ async function startServer() {
 
   app.patch('/api/alarms/:id', (req, res) => {
     const { id } = req.params;
-    const { enabled } = req.body;
+    const { enabled, time, title } = req.body;
     
     if (enabled !== undefined) {
       db.prepare('UPDATE alarms SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
     }
+    if (time !== undefined) {
+      db.prepare('UPDATE alarms SET time = ? WHERE id = ?').run(time, id);
+    }
+    if (title !== undefined) {
+      db.prepare('UPDATE alarms SET title = ? WHERE id = ?').run(title, id);
+    }
     
     const alarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
     broadcast({ type: 'ALARM_UPDATED', alarm });
-    res.json({ success: true });
+    res.json(alarm || { success: true });
   });
 
   app.delete('/api/alarms/:id', (req, res) => {
@@ -189,20 +195,21 @@ async function startServer() {
 
   app.post('/api/alarms/:id/snooze', (req, res) => {
     const { id } = req.params;
+    const snoozeMinutes = typeof req.body?.minutes === 'number' && req.body.minutes > 0 ? req.body.minutes : 5;
     const alarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id) as any;
     
     if (!alarm) return res.status(404).json({ error: 'Alarm not found' });
 
     const [h, m] = alarm.time.split(':').map(Number);
     const date = new Date();
-    date.setHours(h, m + 5, 0, 0);
+    date.setHours(h, m + snoozeMinutes, 0, 0);
     
     const newTime = date.toTimeString().slice(0, 5);
     db.prepare('UPDATE alarms SET time = ? WHERE id = ?').run(newTime, id);
     
     const updatedAlarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
     broadcast({ type: 'ALARM_UPDATED', alarm: updatedAlarm });
-    res.json(updatedAlarm);
+    res.json({ ...updatedAlarm, snoozeMinutes });
   });
 
   // Vite middleware for development
