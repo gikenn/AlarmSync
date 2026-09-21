@@ -1,20 +1,63 @@
-<div align="center">
-<img width="1200" height="475" alt="GHBanner" src="file:///Users/agnesmuthoni/Documents/Screen%20Shot%202026-09-21%20at%2012.31.01.png" />
-</div>
+# 🔔 AlarmSync
 
-# Run and deploy your AI Studio app
+### A modern, offline-capable alarm and reminder web app
 
-This contains everything you need to run your app locally.
+AlarmSync provides scheduled alarms, real-time synchronization between connected devices, persistent alarm storage, and Progressive Web App support.
 
-View your app in AI Studio: https://ai.studio/apps/3b91393c-c6ed-4d16-ac29-c506ad5177bd
+**Live App:** https://alarmsync-production.up.railway.app
 
-## Run Locally
+---
 
-**Prerequisites:**  Node.js
+## 📸 App Preview
 
+![AlarmSync](https://raw.githubusercontent.com/gikenn/AlarmSync/main/public/icons/icon-512.png)
 
-1. Install dependencies:
-   `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
-   `npm run dev`
+The AlarmSync dashboard is designed around the next scheduled alert and a clear list of active alarms, with countdowns and quick controls.
+
+---
+
+## ✨ Features
+
+- ⏰ Create, edit, enable, disable, and delete alarms
+- 🔔 Alarm notifications and sound support
+- 🔄 Real-time synchronization between connected devices
+- 🌐 Offline-capable web application
+- 📱 Progressive Web App (PWA) support
+- 💾 Persistent alarm storage
+- 💤 Alarm snooze functionality
+- 🔌 WebSocket-based device presence and synchronization
+- 📱 Responsive dashboard
+- 🚀 Railway deployment support
+
+---
+
+## 📱 Progressive Web App
+
+AlarmSync includes:
+
+- Web app manifest
+- Service worker
+- PWA icons
+- Offline asset caching
+- Browser local storage
+- Reconnection and synchronization support
+
+> **Browser limitation:** exact alarm delivery can depend on browser and operating-system background restrictions. A native application is generally more reliable when the browser is completely closed.
+
+---
+
+## 🔄 Real-Time Synchronization
+
+AlarmSync uses WebSockets to keep connected clients synchronized.
+
+Alarm creation, updates, deletion, and snoozing can be broadcast to connected devices.
+
+---
+
+## 💾 Data Persistence
+
+Alarm data is stored in:
+
+```text
+data/alarms.json
+
