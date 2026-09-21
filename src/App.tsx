@@ -32,7 +32,11 @@ import {
   ArrowRight,
   Sparkles,
   Check,
-  AlertCircle
+  AlertCircle,
+  Sun,
+  Moon,
+  Sunrise,
+  Sunset
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -138,6 +142,25 @@ export default function App() {
     return {};
   });
   const [simulatedTriggers, setSimulatedTriggers] = useState<Set<number>>(new Set());
+  
+  const [timeOfDayMode, setTimeOfDayMode] = useState<'auto' | 'dawn' | 'day' | 'sunset' | 'night'>(() => {
+    return (localStorage.getItem('sync_alarm_time_of_day_mode') as any) || 'auto';
+  });
+  const [introKey, setIntroKey] = useState(0);
+  const [isIntroActive, setIsIntroActive] = useState(true);
+
+  // Run icon entrance effects once upon site loading (animates once, then rests)
+  useEffect(() => {
+    setIsIntroActive(true);
+    const timer = setTimeout(() => {
+      setIsIntroActive(false);
+    }, 2200);
+    return () => clearTimeout(timer);
+  }, [introKey]);
+
+  const replayIntroEffects = () => {
+    setIntroKey(prev => prev + 1);
+  };
   
   const socketRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
@@ -921,23 +944,41 @@ export default function App() {
       return `rgba(${r}, ${g}, ${b}, ${a})`;
     };
 
+    // Calculate effective hour based on actual current time or preview mode
+    let hour = currentTime.getHours() + currentTime.getMinutes() / 60 + currentTime.getSeconds() / 3600;
+    if (timeOfDayMode === 'dawn') hour = 6.2;
+    else if (timeOfDayMode === 'day') hour = 12.5;
+    else if (timeOfDayMode === 'sunset') hour = 18.5;
+    else if (timeOfDayMode === 'night') hour = 23.5;
+
+    // Harmonious, atmospheric time-of-day keyframes (WCAG AA compliant contrast)
     const keyframes = [
-      { h: 0, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
-      { h: 5, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
-      { h: 7, bg: '#2e1065', text: '#faf5ff', accent: '#fb923c', card: 'rgba(88, 28, 135, 0.4)', secondary: 'rgba(216, 180, 254, 0.7)', button: '#c2410c' },
-      { h: 10, bg: '#064e3b', text: '#ecfdf5', accent: '#10b981', card: 'rgba(6, 78, 59, 0.5)', secondary: 'rgba(110, 231, 183, 0.7)', button: '#059669' },
-      { h: 16, bg: '#064e3b', text: '#ecfdf5', accent: '#10b981', card: 'rgba(6, 78, 59, 0.5)', secondary: 'rgba(110, 231, 183, 0.7)', button: '#059669' },
-      { h: 19, bg: '#450a0a', text: '#fef2f2', accent: '#f59e0b', card: 'rgba(127, 29, 29, 0.4)', secondary: 'rgba(252, 165, 165, 0.7)', button: '#b91c1c' },
-      { h: 21, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' },
-      { h: 24, bg: '#020617', text: '#f8fafc', accent: '#6366f1', card: 'rgba(15, 23, 42, 0.6)', secondary: 'rgba(148, 163, 184, 0.8)', button: '#4338ca' }
+      { h: 0, bg: '#080d1a', text: '#f8fafc', accent: '#818cf8', card: 'rgba(15, 23, 42, 0.75)', secondary: 'rgba(148, 163, 184, 0.85)', button: '#4f46e5' },
+      { h: 5.0, bg: '#080d1a', text: '#f8fafc', accent: '#818cf8', card: 'rgba(15, 23, 42, 0.75)', secondary: 'rgba(148, 163, 184, 0.85)', button: '#4f46e5' },
+      { h: 6.2, bg: '#221226', text: '#fff1f2', accent: '#fb923c', card: 'rgba(48, 22, 54, 0.72)', secondary: 'rgba(253, 186, 116, 0.85)', button: '#ea580c' },
+      { h: 8.5, bg: '#0f2742', text: '#f0f9ff', accent: '#38bdf8', card: 'rgba(15, 39, 66, 0.72)', secondary: 'rgba(147, 197, 253, 0.85)', button: '#0284c7' },
+      { h: 12.5, bg: '#0a2540', text: '#f8fafc', accent: '#38bdf8', card: 'rgba(10, 37, 64, 0.75)', secondary: 'rgba(186, 230, 253, 0.85)', button: '#0369a1' },
+      { h: 16.5, bg: '#162842', text: '#f8fafc', accent: '#38bdf8', card: 'rgba(22, 40, 66, 0.72)', secondary: 'rgba(147, 197, 253, 0.85)', button: '#0284c7' },
+      { h: 18.5, bg: '#2c1220', text: '#fff7ed', accent: '#f59e0b', card: 'rgba(56, 20, 42, 0.74)', secondary: 'rgba(253, 186, 116, 0.85)', button: '#d97706' },
+      { h: 20.5, bg: '#151126', text: '#faf5ff', accent: '#a855f7', card: 'rgba(28, 18, 48, 0.74)', secondary: 'rgba(216, 180, 254, 0.85)', button: '#7e22ce' },
+      { h: 22.5, bg: '#080d1a', text: '#f8fafc', accent: '#818cf8', card: 'rgba(15, 23, 42, 0.75)', secondary: 'rgba(148, 163, 184, 0.85)', button: '#4f46e5' },
+      { h: 24.0, bg: '#080d1a', text: '#f8fafc', accent: '#818cf8', card: 'rgba(15, 23, 42, 0.75)', secondary: 'rgba(148, 163, 184, 0.85)', button: '#4f46e5' }
     ];
 
-    const hour = currentTime.getHours() + currentTime.getMinutes() / 60;
     const nextIdx = keyframes.findIndex(k => k.h > hour);
-    const prevIdx = nextIdx - 1;
+    const prevIdx = nextIdx <= 0 ? 0 : nextIdx - 1;
     const prev = keyframes[prevIdx];
-    const next = keyframes[nextIdx];
-    const t = (hour - prev.h) / (next.h - prev.h);
+    const next = keyframes[nextIdx] || keyframes[keyframes.length - 1];
+    const span = Math.max(0.001, next.h - prev.h);
+    const t = Math.min(1, Math.max(0, (hour - prev.h) / span));
+
+    const activePeriod = (hour >= 5.2 && hour < 8.2) 
+      ? { name: 'Sunrise Dawn', icon: 'sunrise', tag: 'Dawn' }
+      : (hour >= 8.2 && hour < 17.5) 
+        ? { name: 'Daylight Sky', icon: 'sun', tag: 'Day' }
+        : (hour >= 17.5 && hour < 20.8) 
+          ? { name: 'Golden Sunset', icon: 'sunset', tag: 'Sunset' }
+          : { name: 'Midnight Sky', icon: 'moon', tag: 'Night' };
 
     return {
       bg: lerpColor(prev.bg, next.bg, t),
@@ -946,11 +987,15 @@ export default function App() {
       card: lerpColor(prev.card, next.card, t),
       secondary: lerpColor(prev.secondary, next.secondary, t),
       button: lerpColor(prev.button, next.button, t),
-      header: lerpColor(prev.text, next.text, t),
+      header: '#ffffff',
       input: lerpColor(prev.bg, next.bg, 0.5),
-      glass: 'backdrop-blur-xl border border-white/10'
+      glass: 'backdrop-blur-xl border border-white/10',
+      periodName: activePeriod.name,
+      iconType: activePeriod.icon,
+      periodTag: activePeriod.tag,
+      effectiveHour: hour
     };
-  }, [currentTime]);
+  }, [currentTime, timeOfDayMode]);
 
   return (
     <div 
@@ -1083,6 +1128,90 @@ export default function App() {
                     {isMainDevice ? 'Main' : 'Receiver'}
                   </span>
                 </button>
+
+                {/* Time of Day Theme Section */}
+                <div className="p-5 rounded-[2rem] border border-white/5 space-y-3.5" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-white/5" style={{ color: themeStyles.accent }}>
+                        {themeStyles.iconType === 'sunrise' && <Sunrise size={20} />}
+                        {themeStyles.iconType === 'sun' && <Sun size={20} />}
+                        {themeStyles.iconType === 'sunset' && <Sunset size={20} />}
+                        {themeStyles.iconType === 'moon' && <Moon size={20} />}
+                      </div>
+                      <div>
+                        <span className="font-bold text-sm block">Time of Day Theme</span>
+                        <span className="text-[10px] opacity-60 uppercase tracking-wider">
+                          {themeStyles.periodName} • {currentTime.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                        </span>
+                      </div>
+                    </div>
+                    <span 
+                      className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/5" 
+                      style={{ color: themeStyles.accent }}
+                    >
+                      {timeOfDayMode === 'auto' ? 'Auto' : timeOfDayMode.toUpperCase()}
+                    </span>
+                  </div>
+
+                  <p className="text-xs opacity-65 leading-relaxed">
+                    Theme continuously morphs to mirror the real sky: sunrise dawn, bright daytime, golden sunset, and cosmic midnight.
+                  </p>
+
+                  {/* Theme Presets */}
+                  <div className="grid grid-cols-5 gap-1.5 pt-1">
+                    {[
+                      { id: 'auto', label: 'Auto', icon: Sparkles },
+                      { id: 'dawn', label: 'Dawn', icon: Sunrise },
+                      { id: 'day', label: 'Day', icon: Sun },
+                      { id: 'sunset', label: 'Sunset', icon: Sunset },
+                      { id: 'night', label: 'Night', icon: Moon },
+                    ].map((mode) => {
+                      const Icon = mode.icon;
+                      const isSelected = timeOfDayMode === mode.id;
+                      return (
+                        <button
+                          key={mode.id}
+                          id={`theme-mode-${mode.id}-btn`}
+                          onClick={() => {
+                            setTimeOfDayMode(mode.id as any);
+                            localStorage.setItem('sync_alarm_time_of_day_mode', mode.id);
+                          }}
+                          className={`py-2 px-1 rounded-xl text-[11px] font-bold flex flex-col items-center gap-1 transition-all border ${
+                            isSelected
+                              ? 'shadow-sm scale-[1.02]'
+                              : 'border-white/5 hover:bg-white/5 opacity-50'
+                          }`}
+                          style={{
+                            backgroundColor: isSelected ? themeStyles.accent + '25' : 'transparent',
+                            borderColor: isSelected ? themeStyles.accent : 'rgba(255,255,255,0.05)',
+                            color: isSelected ? themeStyles.accent : themeStyles.text
+                          }}
+                        >
+                          <Icon size={14} />
+                          <span>{mode.label}</span>
+                        </button>
+                      );
+                    })}
+                  </div>
+
+                  {/* Site Loading Icon Effects Replay */}
+                  <div className="pt-2 border-t border-white/5 flex items-center justify-between">
+                    <span className="text-[11px] opacity-60">Site Loading Icon Effects:</span>
+                    <button
+                      id="settings-replay-effects-btn"
+                      onClick={() => {
+                        replayIntroEffects();
+                        setShowMenu(false);
+                      }}
+                      className="px-3 py-1.5 rounded-xl text-xs font-bold border border-white/10 hover:bg-white/10 transition-all flex items-center gap-1.5"
+                      style={{ color: themeStyles.accent }}
+                    >
+                      <Sparkles size={12} />
+                      Replay Load Effects
+                    </button>
+                  </div>
+                </div>
 
                 <div className="p-5 rounded-[2rem] border border-white/5 space-y-3" style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}>
                   <div className="flex items-center justify-between">
@@ -1587,11 +1716,13 @@ export default function App() {
           </AnimatePresence>
         </div>
 
-        <header className="mb-16 relative flex items-center justify-center h-12">
+        <header className="mb-14 relative flex items-center justify-between min-h-[56px]">
           <button 
+            id="open-menu-btn"
             onClick={() => setShowMenu(true)}
-            className="absolute left-0 p-3 rounded-2xl transition-all border border-white/10 flex items-center gap-2"
+            className="p-3 rounded-2xl transition-all border border-white/10 flex items-center gap-2 hover:bg-white/5 shrink-0"
             style={{ backgroundColor: themeStyles.card, color: themeStyles.header }}
+            title="Open Settings & Menu"
           >
             <Menu size={20} />
             {!isConnected && <CloudOff size={14} className="text-red-400" />}
@@ -1604,35 +1735,100 @@ export default function App() {
             )}
           </button>
 
-          <motion.h1 
-            initial={{ opacity: 0, y: -10 }}
-            animate={{ 
-              opacity: 1, 
-              y: 0,
-              x: [0, -1, 1, -1, 1, 0, 0],
-              scale: [1, 1, 1, 1, 1, 1, 1.05, 1]
-            }}
-            transition={{
-              x: {
-                repeat: 15, // Vibrate for ~3 seconds
-                duration: 0.2,
-                ease: "linear"
-              },
-              scale: {
-                delay: 3.2, // Start after vibration
-                duration: 0.8,
-                ease: "easeInOut",
-                repeat: Infinity,
-                repeatDelay: 2
-              },
-              opacity: { duration: 0.5 },
-              y: { duration: 0.5 }
-            }}
-            className="text-4xl font-bold tracking-tighter"
-            style={{ color: themeStyles.header }}
+          {/* Center Brand Title & Loading Effect Icon */}
+          <div className="flex flex-col items-center justify-center text-center">
+            <div className="flex items-center gap-2.5">
+              <motion.div
+                key={`brand-bell-icon-${introKey}`}
+                id="brand-icon-btn"
+                animate={isIntroActive ? {
+                  rotate: [0, -22, 22, -16, 16, -10, 10, -4, 4, 0],
+                  scale: [0.75, 1.25, 0.95, 1.12, 1],
+                } : { rotate: 0, scale: 1 }}
+                transition={{ duration: 1.8, ease: "easeInOut" }}
+                onClick={replayIntroEffects}
+                className="relative p-2 rounded-2xl shadow-inner cursor-pointer select-none transition-transform hover:scale-105 active:scale-95"
+                style={{ backgroundColor: themeStyles.accent + '22', color: themeStyles.accent }}
+                title="Click to replay icon entrance effect"
+              >
+                <Bell size={22} />
+                {isIntroActive && (
+                  <motion.span
+                    initial={{ scale: 0.8, opacity: 0.8 }}
+                    animate={{ scale: 2.2, opacity: 0 }}
+                    transition={{ duration: 1.6, ease: "easeOut" }}
+                    className="absolute inset-0 rounded-2xl pointer-events-none border-2"
+                    style={{ borderColor: themeStyles.accent }}
+                  />
+                )}
+              </motion.div>
+
+              <motion.h1 
+                key={`brand-title-${introKey}`}
+                initial={{ opacity: 0, y: -6 }}
+                animate={isIntroActive ? { 
+                  opacity: 1, 
+                  y: 0,
+                  x: [0, -2, 2, -2, 2, -1, 1, 0]
+                } : { opacity: 1, y: 0, x: 0 }}
+                transition={{
+                  x: { duration: 1.2, ease: "linear" },
+                  opacity: { duration: 0.4 },
+                  y: { duration: 0.4 }
+                }}
+                className="text-3xl md:text-4xl font-black tracking-tight"
+                style={{ color: themeStyles.header }}
+              >
+                AlarmSync
+              </motion.h1>
+            </div>
+
+            {/* Time of Day Indicator Pill */}
+            <motion.button
+              key={`tod-pill-${introKey}`}
+              id="time-of-day-pill"
+              onClick={() => setShowMenu(true)}
+              className="mt-1.5 flex items-center gap-1.5 px-3 py-0.5 rounded-full text-[10px] font-mono font-semibold border border-white/10 hover:border-white/20 transition-all cursor-pointer opacity-90 hover:opacity-100"
+              style={{ backgroundColor: 'rgba(0,0,0,0.2)', color: themeStyles.text }}
+              title="Click to customize Time of Day theme in Settings"
+            >
+              <motion.span
+                animate={isIntroActive ? {
+                  rotate: [-60, 20, -10, 0],
+                  scale: [0.6, 1.25, 0.95, 1]
+                } : { rotate: 0, scale: 1 }}
+                transition={{ duration: 1.5, ease: "easeOut", delay: 0.2 }}
+                className="inline-flex items-center"
+                style={{ color: themeStyles.accent }}
+              >
+                {themeStyles.iconType === 'sunrise' && <Sunrise size={12} />}
+                {themeStyles.iconType === 'sun' && <Sun size={12} />}
+                {themeStyles.iconType === 'sunset' && <Sunset size={12} />}
+                {themeStyles.iconType === 'moon' && <Moon size={12} />}
+              </motion.span>
+              <span>{themeStyles.periodName}</span>
+              <span className="opacity-40">•</span>
+              <span className="opacity-70">
+                {timeOfDayMode === 'auto' ? 'Auto Sky Sync' : `${timeOfDayMode.toUpperCase()} Preset`}
+              </span>
+            </motion.button>
+          </div>
+
+          {/* Right Header Action: Replay icon entrance effect */}
+          <button
+            id="replay-effects-header-btn"
+            onClick={replayIntroEffects}
+            className="p-3 rounded-2xl transition-all border border-white/10 hover:bg-white/5 shrink-0 flex items-center gap-1.5"
+            style={{ backgroundColor: themeStyles.card, color: themeStyles.text }}
+            title="Replay icon loading effects"
           >
-            AlarmSync
-          </motion.h1>
+            <motion.div
+              animate={isIntroActive ? { rotate: [0, 360] } : { rotate: 0 }}
+              transition={{ duration: 1.2, ease: "easeOut" }}
+            >
+              <Sparkles size={16} style={{ color: themeStyles.accent }} />
+            </motion.div>
+          </button>
         </header>
 
         {isMainDevice && (
@@ -1739,9 +1935,23 @@ export default function App() {
           >
             <div className="absolute top-0 left-0 w-full h-1 bg-gradient-to-r from-transparent via-white/20 to-transparent" />
             
-            <p className="text-[10px] font-black uppercase tracking-[0.3em] mb-4 opacity-50" style={{ color: themeStyles.text }}>
-              Next Scheduled Alert
-            </p>
+            <div className="flex items-center justify-center gap-2 mb-4">
+              <motion.div
+                key={`next-scheduled-icon-${introKey}`}
+                animate={isIntroActive ? {
+                  rotate: [0, -18, 18, -10, 10, -4, 4, 0],
+                  scale: [0.8, 1.2, 1]
+                } : { rotate: 0, scale: 1 }}
+                transition={{ duration: 1.5, ease: "easeOut", delay: 0.15 }}
+                className="p-2 rounded-xl"
+                style={{ backgroundColor: themeStyles.accent + '22', color: themeStyles.accent }}
+              >
+                <Clock size={16} />
+              </motion.div>
+              <p className="text-[10px] font-black uppercase tracking-[0.3em] opacity-50" style={{ color: themeStyles.text }}>
+                Next Scheduled Alert
+              </p>
+            </div>
             
             {(() => {
               const nextAlarm = [...alarms]
@@ -1816,21 +2026,29 @@ export default function App() {
                       <div className="flex items-center justify-between">
                         <div className="flex items-center gap-6">
                           <motion.div 
+                            key={`alarm-clock-icon-${alarm.id}-${introKey}`}
                             animate={isTriggering ? { 
                               x: [0, -2, 2, -2, 2, 0],
                               scale: [1, 1.1, 1]
                             } : isWarning ? {
                               scale: [1, 1.05, 1],
                               opacity: [1, 0.8, 1]
-                            } : {}}
+                            } : isIntroActive ? {
+                              rotate: [0, -16, 16, -10, 10, -4, 4, 0],
+                              scale: [0.85, 1.12, 1]
+                            } : { rotate: 0, scale: 1 }}
                             transition={isTriggering ? { 
                               x: { repeat: Infinity, duration: 0.2 },
                               scale: { repeat: Infinity, duration: 1 }
                             } : isWarning ? {
                               repeat: Infinity,
                               duration: 2
+                            } : isIntroActive ? {
+                              duration: 1.4,
+                              delay: 0.2 + (Math.min(alarm.id % 6, 5) * 0.08),
+                              ease: "easeOut"
                             } : {}}
-                            className="p-4 rounded-2xl shadow-inner" 
+                            className="p-4 rounded-2xl shadow-inner transition-colors" 
                             style={{ backgroundColor: alarm.enabled ? themeStyles.accent + '22' : 'rgba(0,0,0,0.2)', color: alarm.enabled ? themeStyles.accent : themeStyles.text + '44' }}
                           >
                             <Clock size={28} className={isTriggering ? 'animate-pulse' : ''} />
