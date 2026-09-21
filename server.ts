@@ -24,9 +24,11 @@ function loadAlarmsFromFile(): AlarmRecord[] {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
+
     if (fs.existsSync(DATA_FILE)) {
       const content = fs.readFileSync(DATA_FILE, 'utf-8');
       const parsed = JSON.parse(content);
+
       if (Array.isArray(parsed) && parsed.length > 0) {
         return parsed.map((a: any) => ({
           ...a,
@@ -35,11 +37,27 @@ function loadAlarmsFromFile(): AlarmRecord[] {
       }
     }
   } catch (err) {
-    console.warn('Could not read data/alarms.json, using defaults:', err);
+    console.warn(
+      'Could not read data/alarms.json, using defaults:',
+      err
+    );
   }
+
   return [
-    { id: 1, title: 'Morning Wakeup', time: '07:30', enabled: 1, created_at: new Date().toISOString() },
-    { id: 2, title: 'Daily Standup', time: '09:30', enabled: 1, created_at: new Date().toISOString() }
+    {
+      id: 1,
+      title: 'Morning Wakeup',
+      time: '07:30',
+      enabled: 1,
+      created_at: new Date().toISOString()
+    },
+    {
+      id: 2,
+      title: 'Daily Standup',
+      time: '09:30',
+      enabled: 1,
+      created_at: new Date().toISOString()
+    }
   ];
 }
 
@@ -48,35 +66,64 @@ function saveAlarmsToFile() {
     if (!fs.existsSync(DATA_DIR)) {
       fs.mkdirSync(DATA_DIR, { recursive: true });
     }
-    fs.writeFileSync(DATA_FILE, JSON.stringify(alarmsTable, null, 2), 'utf-8');
+
+    fs.writeFileSync(
+      DATA_FILE,
+      JSON.stringify(alarmsTable, null, 2),
+      'utf-8'
+    );
   } catch (err) {
     console.warn('Could not persist data/alarms.json:', err);
   }
 }
 
 let alarmsTable: AlarmRecord[] = loadAlarmsFromFile();
-let nextAlarmId = Math.max(3, ...alarmsTable.map(a => a.id + 1));
+
+let nextAlarmId = Math.max(
+  3,
+  ...alarmsTable.map(a => a.id + 1)
+);
 
 const db = {
   exec: (_sql: string) => {},
+
   prepare: (sql: string) => {
     return {
       all: (..._args: any[]) => {
         if (sql.includes('SELECT * FROM alarms')) {
           return [...alarmsTable]
-            .map(a => ({ ...a, enabled: Boolean(a.enabled) }))
-            .sort((a, b) => a.time.localeCompare(b.time));
+            .map(a => ({
+              ...a,
+              enabled: Boolean(a.enabled)
+            }))
+            .sort((a, b) =>
+              a.time.localeCompare(b.time)
+            );
         }
+
         return [];
       },
+
       get: (id: any) => {
         const numId = Number(id);
-        const item = alarmsTable.find(a => a.id === numId);
-        return item ? { ...item, enabled: Boolean(item.enabled) } : null;
+        const item = alarmsTable.find(
+          a => a.id === numId
+        );
+
+        return item
+          ? {
+              ...item,
+              enabled: Boolean(item.enabled)
+            }
+          : null;
       },
+
       run: (...args: any[]) => {
+
+        // Create alarm
         if (sql.includes('INSERT INTO alarms')) {
           const [title, time] = args;
+
           const newAlarm: AlarmRecord = {
             id: nextAlarmId++,
             title,
@@ -84,38 +131,121 @@ const db = {
             enabled: 1,
             created_at: new Date().toISOString()
           };
+
           alarmsTable.push(newAlarm);
           saveAlarmsToFile();
-          return { lastInsertRowid: newAlarm.id, changes: 1 };
+
+          return {
+            lastInsertRowid: newAlarm.id,
+            changes: 1
+          };
         }
-        if (sql.includes('UPDATE alarms SET enabled = ?')) {
+
+        // Enable / disable alarm
+        if (
+          sql.includes(
+            'UPDATE alarms SET enabled = ?'
+          )
+        ) {
           const [enabled, id] = args;
-          const target = alarmsTable.find(a => a.id === Number(id));
+
+          const target = alarmsTable.find(
+            a => a.id === Number(id)
+          );
+
           if (target) {
             target.enabled = enabled ? 1 : 0;
             saveAlarmsToFile();
-            return { changes: 1 };
+
+            return {
+              changes: 1
+            };
           }
-          return { changes: 0 };
+
+          return {
+            changes: 0
+          };
         }
-        if (sql.includes('UPDATE alarms SET time = ?')) {
+
+        // Update alarm time
+        if (
+          sql.includes(
+            'UPDATE alarms SET time = ?'
+          )
+        ) {
           const [time, id] = args;
-          const target = alarmsTable.find(a => a.id === Number(id));
+
+          const target = alarmsTable.find(
+            a => a.id === Number(id)
+          );
+
           if (target) {
             target.time = time;
             saveAlarmsToFile();
-            return { changes: 1 };
+
+            return {
+              changes: 1
+            };
           }
-          return { changes: 0 };
+
+          return {
+            changes: 0
+          };
         }
-        if (sql.includes('DELETE FROM alarms')) {
+
+        // Update alarm title
+        if (
+          sql.includes(
+            'UPDATE alarms SET title = ?'
+          )
+        ) {
+          const [title, id] = args;
+
+          const target = alarmsTable.find(
+            a => a.id === Number(id)
+          );
+
+          if (target) {
+            target.title = title;
+            saveAlarmsToFile();
+
+            return {
+              changes: 1
+            };
+          }
+
+          return {
+            changes: 0
+          };
+        }
+
+        // Delete alarm
+        if (
+          sql.includes(
+            'DELETE FROM alarms'
+          )
+        ) {
           const [id] = args;
-          const countBefore = alarmsTable.length;
-          alarmsTable = alarmsTable.filter(a => a.id !== Number(id));
+
+          const countBefore =
+            alarmsTable.length;
+
+          alarmsTable = alarmsTable.filter(
+            a => a.id !== Number(id)
+          );
+
           saveAlarmsToFile();
-          return { changes: countBefore - alarmsTable.length };
+
+          return {
+            changes:
+              countBefore - alarmsTable.length
+          };
         }
-        return { changes: 0, lastInsertRowid: 0 };
+
+        return {
+          changes: 0,
+          lastInsertRowid: 0
+        };
       }
     };
   }
@@ -123,154 +253,474 @@ const db = {
 
 async function startServer() {
   const app = express();
-  const server = createServer(app);
-  const wss = new WebSocketServer({ server });
-  const PORT = 3000;
 
-  const clients = new Map<string, { role: string; id: string }>();
+  const server = createServer(app);
+
+  const wss = new WebSocketServer({
+    server
+  });
+
+  // Railway provides PORT through the environment.
+  // Fall back to 3000 for local development.
+  const PORT =
+    Number(process.env.PORT) || 3000;
+
+  const clients = new Map<
+    string,
+    {
+      role: string;
+      id: string;
+    }
+  >();
 
   app.use(express.json());
 
   // Enable CORS for all incoming client requests
   app.use((req, res, next) => {
-    res.setHeader('Access-Control-Allow-Origin', '*');
-    res.setHeader('Access-Control-Allow-Methods', 'GET, POST, PUT, PATCH, DELETE, OPTIONS');
-    res.setHeader('Access-Control-Allow-Headers', 'Content-Type, Authorization, X-Requested-With');
+    res.setHeader(
+      'Access-Control-Allow-Origin',
+      '*'
+    );
+
+    res.setHeader(
+      'Access-Control-Allow-Methods',
+      'GET, POST, PUT, PATCH, DELETE, OPTIONS'
+    );
+
+    res.setHeader(
+      'Access-Control-Allow-Headers',
+      'Content-Type, Authorization, X-Requested-With'
+    );
+
     if (req.method === 'OPTIONS') {
       res.sendStatus(204);
       return;
     }
+
     next();
   });
 
   // Health check endpoint
   app.get('/api/health', (req, res) => {
-    res.json({ status: 'ok', timestamp: new Date().toISOString() });
+    res.json({
+      status: 'ok',
+      timestamp: new Date().toISOString()
+    });
   });
 
   // WebSocket broadcast helper
   const broadcast = (data: any) => {
-    wss.clients.forEach((client) => {
-      if (client.readyState === WebSocket.OPEN) {
-        client.send(JSON.stringify(data));
+    wss.clients.forEach(client => {
+      if (
+        client.readyState === WebSocket.OPEN
+      ) {
+        client.send(
+          JSON.stringify(data)
+        );
       }
     });
   };
 
-  wss.on('connection', (ws, req) => {
-    const clientId = Math.random().toString(36).substring(7);
-    
-    ws.on('message', (message) => {
-      const data = JSON.parse(message.toString());
-      if (data.type === 'IDENTIFY') {
-        clients.set(clientId, { role: data.role, id: clientId });
-        broadcast({ 
-          type: 'PRESENCE_UPDATE', 
-          count: wss.clients.size,
-          devices: Array.from(clients.values())
+  // WebSocket connections
+  wss.on(
+    'connection',
+    (ws, req) => {
+      const clientId =
+        Math.random()
+          .toString(36)
+          .substring(7);
+
+      ws.on(
+        'message',
+        message => {
+          try {
+            const data = JSON.parse(
+              message.toString()
+            );
+
+            if (
+              data.type === 'IDENTIFY'
+            ) {
+              clients.set(clientId, {
+                role: data.role,
+                id: clientId
+              });
+
+              broadcast({
+                type:
+                  'PRESENCE_UPDATE',
+                count:
+                  wss.clients.size,
+                devices:
+                  Array.from(
+                    clients.values()
+                  )
+              });
+            }
+
+            if (
+              data.type ===
+                'KICK_DEVICE' &&
+              clients.get(clientId)
+                ?.role === 'main'
+            ) {
+              broadcast({
+                type: 'KICKED',
+                targetId:
+                  data.targetId
+              });
+            }
+          } catch (err) {
+            console.warn(
+              'Invalid WebSocket message:',
+              err
+            );
+          }
+        }
+      );
+
+      ws.on(
+        'close',
+        () => {
+          clients.delete(
+            clientId
+          );
+
+          broadcast({
+            type:
+              'PRESENCE_UPDATE',
+            count:
+              wss.clients.size,
+            devices:
+              Array.from(
+                clients.values()
+              )
+          });
+        }
+      );
+
+      // Send initial presence
+      ws.send(
+        JSON.stringify({
+          type:
+            'PRESENCE_UPDATE',
+          count:
+            wss.clients.size,
+          devices:
+            Array.from(
+              clients.values()
+            )
+        })
+      );
+    }
+  );
+
+  // ============================
+  // API ROUTES
+  // ============================
+
+  // Get all alarms
+  app.get(
+    '/api/alarms',
+    (req, res) => {
+      const alarms =
+        db
+          .prepare(
+            'SELECT * FROM alarms ORDER BY time ASC'
+          )
+          .all();
+
+      res.json(alarms);
+    }
+  );
+
+  // Create alarm
+  app.post(
+    '/api/alarms',
+    (req, res) => {
+      const {
+        title,
+        time
+      } = req.body;
+
+      if (
+        !title ||
+        !time
+      ) {
+        return res.status(400).json({
+          error:
+            'Title and time are required'
         });
       }
-      if (data.type === 'KICK_DEVICE' && clients.get(clientId)?.role === 'main') {
-        broadcast({ type: 'KICKED', targetId: data.targetId });
-      }
-    });
 
-    ws.on('close', () => {
-      clients.delete(clientId);
-      broadcast({ 
-        type: 'PRESENCE_UPDATE', 
-        count: wss.clients.size,
-        devices: Array.from(clients.values())
+      const result =
+        db
+          .prepare(
+            'INSERT INTO alarms (title, time) VALUES (?, ?)'
+          )
+          .run(
+            title,
+            time
+          );
+
+      const alarm =
+        db
+          .prepare(
+            'SELECT * FROM alarms WHERE id = ?'
+          )
+          .get(
+            result.lastInsertRowid
+          );
+
+      broadcast({
+        type:
+          'ALARM_CREATED',
+        alarm
       });
-    });
 
-    // Send initial presence
-    ws.send(JSON.stringify({ 
-      type: 'PRESENCE_UPDATE', 
-      count: wss.clients.size,
-      devices: Array.from(clients.values())
-    }));
-  });
-
-  // API Routes
-  app.get('/api/alarms', (req, res) => {
-    const alarms = db.prepare('SELECT * FROM alarms ORDER BY time ASC').all();
-    res.json(alarms);
-  });
-
-  app.post('/api/alarms', (req, res) => {
-    const { title, time } = req.body;
-    const result = db.prepare('INSERT INTO alarms (title, time) VALUES (?, ?)').run(title, time);
-    const alarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(result.lastInsertRowid);
-    broadcast({ type: 'ALARM_CREATED', alarm });
-    res.json(alarm);
-  });
-
-  app.patch('/api/alarms/:id', (req, res) => {
-    const { id } = req.params;
-    const { enabled, time, title } = req.body;
-    
-    if (enabled !== undefined) {
-      db.prepare('UPDATE alarms SET enabled = ? WHERE id = ?').run(enabled ? 1 : 0, id);
+      res.json(alarm);
     }
-    if (time !== undefined) {
-      db.prepare('UPDATE alarms SET time = ? WHERE id = ?').run(time, id);
+  );
+
+  // Update alarm
+  app.patch(
+    '/api/alarms/:id',
+    (req, res) => {
+      const {
+        id
+      } = req.params;
+
+      const {
+        enabled,
+        time,
+        title
+      } = req.body;
+
+      if (
+        enabled !== undefined
+      ) {
+        db
+          .prepare(
+            'UPDATE alarms SET enabled = ? WHERE id = ?'
+          )
+          .run(
+            enabled ? 1 : 0,
+            id
+          );
+      }
+
+      if (
+        time !== undefined
+      ) {
+        db
+          .prepare(
+            'UPDATE alarms SET time = ? WHERE id = ?'
+          )
+          .run(
+            time,
+            id
+          );
+      }
+
+      if (
+        title !== undefined
+      ) {
+        db
+          .prepare(
+            'UPDATE alarms SET title = ? WHERE id = ?'
+          )
+          .run(
+            title,
+            id
+          );
+      }
+
+      const alarm =
+        db
+          .prepare(
+            'SELECT * FROM alarms WHERE id = ?'
+          )
+          .get(id);
+
+      broadcast({
+        type:
+          'ALARM_UPDATED',
+        alarm
+      });
+
+      res.json(
+        alarm || {
+          success: true
+        }
+      );
     }
-    if (title !== undefined) {
-      db.prepare('UPDATE alarms SET title = ? WHERE id = ?').run(title, id);
+  );
+
+  // Delete alarm
+  app.delete(
+    '/api/alarms/:id',
+    (req, res) => {
+      const {
+        id
+      } = req.params;
+
+      db
+        .prepare(
+          'DELETE FROM alarms WHERE id = ?'
+        )
+        .run(id);
+
+      broadcast({
+        type:
+          'ALARM_DELETED',
+        id: parseInt(id)
+      });
+
+      res.json({
+        success: true
+      });
     }
-    
-    const alarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
-    broadcast({ type: 'ALARM_UPDATED', alarm });
-    res.json(alarm || { success: true });
-  });
+  );
 
-  app.delete('/api/alarms/:id', (req, res) => {
-    const { id } = req.params;
-    db.prepare('DELETE FROM alarms WHERE id = ?').run(id);
-    broadcast({ type: 'ALARM_DELETED', id: parseInt(id) });
-    res.json({ success: true });
-  });
+  // Snooze alarm
+  app.post(
+    '/api/alarms/:id/snooze',
+    (req, res) => {
+      const {
+        id
+      } = req.params;
 
-  app.post('/api/alarms/:id/snooze', (req, res) => {
-    const { id } = req.params;
-    const snoozeMinutes = typeof req.body?.minutes === 'number' && req.body.minutes > 0 ? req.body.minutes : 5;
-    const alarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id) as any;
-    
-    if (!alarm) return res.status(404).json({ error: 'Alarm not found' });
+      const snoozeMinutes =
+        typeof req.body?.minutes ===
+          'number' &&
+        req.body.minutes > 0
+          ? req.body.minutes
+          : 5;
 
-    const [h, m] = alarm.time.split(':').map(Number);
-    const date = new Date();
-    date.setHours(h, m + snoozeMinutes, 0, 0);
-    
-    const newTime = date.toTimeString().slice(0, 5);
-    db.prepare('UPDATE alarms SET time = ? WHERE id = ?').run(newTime, id);
-    
-    const updatedAlarm = db.prepare('SELECT * FROM alarms WHERE id = ?').get(id);
-    broadcast({ type: 'ALARM_UPDATED', alarm: updatedAlarm });
-    res.json({ ...updatedAlarm, snoozeMinutes });
-  });
+      const alarm =
+        db
+          .prepare(
+            'SELECT * FROM alarms WHERE id = ?'
+          )
+          .get(id) as any;
 
-  // Serve public assets (icons, alarm.wav, sw.js, manifest)
-  app.use(express.static(path.resolve(process.cwd(), 'public')));
+      if (!alarm) {
+        return res.status(404).json({
+          error:
+            'Alarm not found'
+        });
+      }
+
+      const [
+        h,
+        m
+      ] =
+        alarm.time
+          .split(':')
+          .map(Number);
+
+      const date =
+        new Date();
+
+      date.setHours(
+        h,
+        m +
+          snoozeMinutes,
+        0,
+        0
+      );
+
+      const newTime =
+        date
+          .toTimeString()
+          .slice(0, 5);
+
+      db
+        .prepare(
+          'UPDATE alarms SET time = ? WHERE id = ?'
+        )
+        .run(
+          newTime,
+          id
+        );
+
+      const updatedAlarm =
+        db
+          .prepare(
+            'SELECT * FROM alarms WHERE id = ?'
+          )
+          .get(id);
+
+      broadcast({
+        type:
+          'ALARM_UPDATED',
+        alarm:
+          updatedAlarm
+      });
+
+      res.json({
+        ...updatedAlarm,
+        snoozeMinutes
+      });
+    }
+  );
+
+  // Serve public assets
+  app.use(
+    express.static(
+      path.resolve(
+        process.cwd(),
+        'public'
+      )
+    )
+  );
 
   // Vite middleware for development
-  if (process.env.NODE_ENV !== 'production') {
-    const vite = await createViteServer({
-      server: { middlewareMode: true },
-      appType: 'spa',
-    });
-    app.use(vite.middlewares);
+  if (
+    process.env.NODE_ENV !==
+    'production'
+  ) {
+    const vite =
+      await createViteServer({
+        server: {
+          middlewareMode: true
+        },
+        appType: 'spa'
+      });
+
+    app.use(
+      vite.middlewares
+    );
   } else {
-    app.use(express.static('dist'));
-    app.get('*', (req, res) => {
-      res.sendFile(path.resolve('dist/index.html'));
-    });
+    // Serve production frontend
+    app.use(
+      express.static('dist')
+    );
+
+    app.get(
+      '*',
+      (req, res) => {
+        res.sendFile(
+          path.resolve(
+            'dist/index.html'
+          )
+        );
+      }
+    );
   }
 
-  server.listen(PORT, '0.0.0.0', () => {
-    console.log(`Server running on http://localhost:${PORT}`);
-  });
+  // IMPORTANT:
+  // Railway assigns the port through process.env.PORT.
+  // The server must listen on that port.
+  server.listen(
+    PORT,
+    '0.0.0.0',
+    () => {
+      console.log(
+        `Server running on port ${PORT}`
+      );
+    }
+  );
 }
 
 startServer();
