@@ -61,3 +61,105 @@ Alarm data is stored in:
 ```text
 data/alarms.json
 
+The server loads saved alarms on startup and persists changes back to the file.
+
+The frontend also uses browser storage to support offline usage and synchronization.
+
+🛠️ Technology Stack
+Frontend: React + TypeScript
+Build: Vite
+Backend: Node.js + Express
+Real-time: WebSocket
+PWA: Web App Manifest + Service Worker
+Storage: JSON + browser local storage
+Deployment: Railway
+🚀 Run Locally
+Requirements
+Node.js
+npm
+Install
+npm install
+Development
+npm run dev
+Production
+npm run build
+npm start
+
+The server uses the hosting provider's PORT environment variable when available and falls back to port 3000 for local development.
+
+☁️ Railway Deployment
+
+Deployment flow:
+
+GitHub
+   ↓
+Railway
+   ↓
+AlarmSync
+   ↓
+HTTPS
+Live application
+
+https://alarmsync-production.up.railway.app
+
+Railway provides the application port through:
+
+process.env.PORT
+🔌 API
+Method	Endpoint	Purpose
+GET	/api/health	Server health check
+GET	/api/alarms	Get alarms
+POST	/api/alarms	Create an alarm
+PATCH	/api/alarms/:id	Update an alarm
+DELETE	/api/alarms/:id	Delete an alarm
+POST	/api/alarms/:id/snooze	Snooze an alarm
+Health Check
+/api/health
+📁 Project Structure
+AlarmSync/
+├── data/
+│   └── alarms.json
+├── public/
+│   ├── alarm.wav
+│   ├── icons/
+│   ├── manifest.webmanifest
+│   └── sw.js
+├── src/
+│   ├── App.tsx
+│   ├── index.css
+│   └── main.tsx
+├── server.ts
+├── index.html
+├── package.json
+├── tsconfig.json
+├── vite.config.ts
+└── README.md
+🔐 Environment Variables
+
+Use .env.example as the starting point for local environment configuration.
+
+Do not commit private credentials or secrets to GitHub.
+
+🤝 Contributing
+Fork the repository.
+Create a feature branch.
+Make your changes.
+Test the application.
+Open a pull request.
+📄 License
+
+See the repository for the current project licensing information.
+
+AlarmSync — simple alarms, synchronized everywhere.
+
+
+### How to paste it
+
+On GitHub:
+
+**AlarmSync → README.md → ✏️ Edit → Ctrl/Cmd+A → paste the code above → Commit changes.**
+
+For the commit message, use:
+
+```text
+docs: update README for AlarmSync
