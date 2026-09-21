@@ -2,6 +2,7 @@ import express from 'express';
 import { createServer as createViteServer } from 'vite';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { WebSocketServer, WebSocket } from 'ws';
 import { createServer } from 'http';
 
@@ -15,12 +16,46 @@ interface AlarmRecord {
   created_at: string;
 }
 
-// In-memory data store replacing native sqlite3 for cloud container compatibility
-let alarmsTable: AlarmRecord[] = [
-  { id: 1, title: 'Morning Wakeup', time: '07:30', enabled: 1, created_at: new Date().toISOString() },
-  { id: 2, title: 'Daily Standup', time: '09:30', enabled: 1, created_at: new Date().toISOString() }
-];
-let nextAlarmId = 3;
+const DATA_DIR = path.resolve(process.cwd(), 'data');
+const DATA_FILE = path.join(DATA_DIR, 'alarms.json');
+
+function loadAlarmsFromFile(): AlarmRecord[] {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    if (fs.existsSync(DATA_FILE)) {
+      const content = fs.readFileSync(DATA_FILE, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.map((a: any) => ({
+          ...a,
+          enabled: a.enabled ? 1 : 0
+        }));
+      }
+    }
+  } catch (err) {
+    console.warn('Could not read data/alarms.json, using defaults:', err);
+  }
+  return [
+    { id: 1, title: 'Morning Wakeup', time: '07:30', enabled: 1, created_at: new Date().toISOString() },
+    { id: 2, title: 'Daily Standup', time: '09:30', enabled: 1, created_at: new Date().toISOString() }
+  ];
+}
+
+function saveAlarmsToFile() {
+  try {
+    if (!fs.existsSync(DATA_DIR)) {
+      fs.mkdirSync(DATA_DIR, { recursive: true });
+    }
+    fs.writeFileSync(DATA_FILE, JSON.stringify(alarmsTable, null, 2), 'utf-8');
+  } catch (err) {
+    console.warn('Could not persist data/alarms.json:', err);
+  }
+}
+
+let alarmsTable: AlarmRecord[] = loadAlarmsFromFile();
+let nextAlarmId = Math.max(3, ...alarmsTable.map(a => a.id + 1));
 
 const db = {
   exec: (_sql: string) => {},
@@ -50,6 +85,7 @@ const db = {
             created_at: new Date().toISOString()
           };
           alarmsTable.push(newAlarm);
+          saveAlarmsToFile();
           return { lastInsertRowid: newAlarm.id, changes: 1 };
         }
         if (sql.includes('UPDATE alarms SET enabled = ?')) {
@@ -57,6 +93,7 @@ const db = {
           const target = alarmsTable.find(a => a.id === Number(id));
           if (target) {
             target.enabled = enabled ? 1 : 0;
+            saveAlarmsToFile();
             return { changes: 1 };
           }
           return { changes: 0 };
@@ -66,6 +103,7 @@ const db = {
           const target = alarmsTable.find(a => a.id === Number(id));
           if (target) {
             target.time = time;
+            saveAlarmsToFile();
             return { changes: 1 };
           }
           return { changes: 0 };
@@ -74,6 +112,7 @@ const db = {
           const [id] = args;
           const countBefore = alarmsTable.length;
           alarmsTable = alarmsTable.filter(a => a.id !== Number(id));
+          saveAlarmsToFile();
           return { changes: countBefore - alarmsTable.length };
         }
         return { changes: 0, lastInsertRowid: 0 };
@@ -211,6 +250,9 @@ async function startServer() {
     broadcast({ type: 'ALARM_UPDATED', alarm: updatedAlarm });
     res.json({ ...updatedAlarm, snoozeMinutes });
   });
+
+  // Serve public assets (icons, alarm.wav, sw.js, manifest)
+  app.use(express.static(path.resolve(process.cwd(), 'public')));
 
   // Vite middleware for development
   if (process.env.NODE_ENV !== 'production') {

@@ -36,7 +36,8 @@ import {
   Sun,
   Moon,
   Sunrise,
-  Sunset
+  Sunset,
+  Download
 } from 'lucide-react';
 import { QRCodeSVG } from 'qrcode.react';
 
@@ -165,6 +166,109 @@ export default function App() {
   const socketRef = useRef<WebSocket | null>(null);
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const synthAudioCtxRef = useRef<AudioContext | null>(null);
+  const synthIntervalRef = useRef<any>(null);
+
+  const [selectedTone, setSelectedTone] = useState<'chime' | 'synth' | 'custom'>(() => {
+    return (localStorage.getItem('sync_alarm_tone') as any) || 'chime';
+  });
+  const [deferredPrompt, setDeferredPrompt] = useState<any>(null);
+  const [isInstallable, setIsInstallable] = useState(false);
+
+  // Register service worker for offline alarm support
+  useEffect(() => {
+    if ('serviceWorker' in navigator) {
+      window.addEventListener('load', () => {
+        navigator.serviceWorker.register('/sw.js').catch(err => {
+          console.log('SW registration note:', err);
+        });
+      });
+    }
+
+    const handleBeforeInstallPrompt = (e: Event) => {
+      e.preventDefault();
+      setDeferredPrompt(e);
+      setIsInstallable(true);
+    };
+
+    window.addEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    return () => {
+      window.removeEventListener('beforeinstallprompt', handleBeforeInstallPrompt);
+    };
+  }, []);
+
+  // Save selected tone preference
+  useEffect(() => {
+    localStorage.setItem('sync_alarm_tone', selectedTone);
+  }, [selectedTone]);
+
+  // Web Audio synthesizer tone fallback
+  const startSynthAlarm = () => {
+    try {
+      const AudioCtx = window.AudioContext || (window as any).webkitAudioContext;
+      if (!AudioCtx) return;
+      if (!synthAudioCtxRef.current) {
+        synthAudioCtxRef.current = new AudioCtx();
+      }
+      const ctx = synthAudioCtxRef.current;
+      if (ctx.state === 'suspended') {
+        ctx.resume();
+      }
+      setIsAudioPlaying(true);
+
+      const playPulse = () => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        osc.frequency.setValueAtTime(880, ctx.currentTime);
+        osc.frequency.exponentialRampToValueAtTime(1320, ctx.currentTime + 0.15);
+        gain.gain.setValueAtTime(0.25, ctx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, ctx.currentTime + 0.35);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start();
+        osc.stop(ctx.currentTime + 0.35);
+      };
+
+      playPulse();
+      if (!synthIntervalRef.current) {
+        synthIntervalRef.current = setInterval(playPulse, 600);
+      }
+    } catch (err) {
+      console.warn("Synthesizer audio playback warning:", err);
+    }
+  };
+
+  const stopAlarmSound = () => {
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current.currentTime = 0;
+    }
+    if (synthIntervalRef.current) {
+      clearInterval(synthIntervalRef.current);
+      synthIntervalRef.current = null;
+    }
+    setIsAudioPlaying(false);
+  };
+
+  const playAlarmSound = () => {
+    if (!soundEnabled) return;
+
+    if (selectedTone === 'synth') {
+      startSynthAlarm();
+      return;
+    }
+
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().catch(e => {
+        console.warn("Audio element blocked or unplayable, using synthesizer chime fallback:", e);
+        startSynthAlarm();
+      });
+    } else {
+      startSynthAlarm();
+    }
+  };
 
   // Persist snoozed alarms, offline queue, and conflicts
   useEffect(() => {
@@ -193,31 +297,40 @@ export default function App() {
   }, [alarms]);
 
   useEffect(() => {
-    audioRef.current = new Audio('https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3');
-    audioRef.current.loop = true;
-    audioRef.current.onplay = () => setIsAudioPlaying(true);
-    audioRef.current.onpause = () => setIsAudioPlaying(false);
-    audioRef.current.onended = () => setIsAudioPlaying(false);
+    // Primary sound is local /alarm.wav for offline reliability
+    const audio = new Audio('/alarm.wav');
+    audio.loop = true;
+    audio.onplay = () => setIsAudioPlaying(true);
+    audio.onpause = () => {
+      if (!synthIntervalRef.current) setIsAudioPlaying(false);
+    };
+    audio.onended = () => {
+      if (!synthIntervalRef.current) setIsAudioPlaying(false);
+    };
+    audio.onerror = () => {
+      // Fallback to online CDN if local audio load fails
+      if (audio.src.includes('/alarm.wav')) {
+        audio.src = 'https://assets.mixkit.co/active_storage/sfx/2869/2869-preview.mp3';
+      }
+    };
+    audioRef.current = audio;
   }, []);
 
   const togglePreview = () => {
-    if (!audioRef.current) return;
     if (isAudioPlaying) {
-      audioRef.current.pause();
+      stopAlarmSound();
     } else {
-      audioRef.current.play().catch(e => console.warn("Audio playback delayed until user interaction:", e));
+      playAlarmSound();
     }
   };
 
   const handleSoundUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (file) {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
+      stopAlarmSound();
       const url = URL.createObjectURL(file);
       setCustomSound(url);
+      setSelectedTone('custom');
       if (audioRef.current) {
         audioRef.current.src = url;
       }
@@ -720,12 +833,11 @@ export default function App() {
       // Notify at alarm time
       if (currentTimeStr === alarm.time && now.getSeconds() === 0 && !isSnoozed) {
         addNotification(alarm.id, alarm.title, "ALARM NOW!");
-        if (soundEnabled && audioRef.current) {
-          audioRef.current.play().catch(e => console.warn("Audio play blocked by browser policy:", e));
+        if (soundEnabled) {
+          playAlarmSound();
           // Stop after 30 seconds or when snoozed
           setTimeout(() => {
-            audioRef.current?.pause();
-            if (audioRef.current) audioRef.current.currentTime = 0;
+            stopAlarmSound();
           }, 30000);
         }
       }
@@ -823,10 +935,7 @@ export default function App() {
 
   const snoozeAlarm = async (id: number, minutes: number = snoozeDuration) => {
     try {
-      if (audioRef.current) {
-        audioRef.current.pause();
-        audioRef.current.currentTime = 0;
-      }
+      stopAlarmSound();
 
       // Immediately clear triggered state on this device
       setTriggeringAlarms(prev => {
@@ -879,15 +988,10 @@ export default function App() {
       const next = new Set(prev);
       if (next.has(id)) {
         next.delete(id);
-        if (audioRef.current) {
-          audioRef.current.pause();
-          audioRef.current.currentTime = 0;
-        }
+        stopAlarmSound();
       } else {
         next.add(id);
-        if (soundEnabled && audioRef.current) {
-          audioRef.current.play().catch(e => console.warn("Audio play blocked by browser policy:", e));
-        }
+        playAlarmSound();
       }
       return next;
     });
@@ -1035,10 +1139,11 @@ export default function App() {
                 
                 <button 
                   onClick={() => {
-                    setSoundEnabled(!soundEnabled);
-                    if (soundEnabled && audioRef.current) {
-                      audioRef.current.pause();
-                      audioRef.current.currentTime = 0;
+                    if (soundEnabled) {
+                      setSoundEnabled(false);
+                      stopAlarmSound();
+                    } else {
+                      setSoundEnabled(true);
                     }
                   }}
                   className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
@@ -1055,31 +1160,119 @@ export default function App() {
                   </span>
                 </button>
 
+                {/* Sound Tone Selection & Preview */}
                 <div 
-                  className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all cursor-pointer hover:bg-white/5"
+                  className="w-full p-5 rounded-[2rem] border border-white/5 space-y-3"
                   style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
-                  onClick={() => fileInputRef.current?.click()}
                 >
-                  <div className="flex items-center gap-4">
-                    <div className="p-3 rounded-xl bg-white/5">
-                      <Music size={20} />
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-white/5" style={{ color: themeStyles.accent }}>
+                        <Music size={20} />
+                      </div>
+                      <div>
+                        <span className="font-bold text-sm block">Alarm Tone</span>
+                        <span className="text-[10px] opacity-60">
+                          {selectedTone === 'chime' ? 'Crystal Chime (/alarm.wav)' : selectedTone === 'synth' ? 'Synthesizer Beeps' : 'Custom Upload'}
+                        </span>
+                      </div>
                     </div>
-                    <span className="font-bold text-sm">Custom Sound</span>
-                  </div>
-                  <div className="flex items-center gap-2">
                     <button 
                       onClick={(e) => { e.stopPropagation(); togglePreview(); }}
                       className="flex items-center gap-1.5 px-3 py-1.5 rounded-xl hover:bg-white/10 transition-all text-[10px] font-bold uppercase tracking-wider"
                       style={{ color: themeStyles.accent, border: `1px solid ${themeStyles.accent}33` }}
                     >
                       {isAudioPlaying ? <Pause size={12} /> : <Play size={12} />}
-                      {isAudioPlaying ? 'Stop' : 'Preview'}
+                      {isAudioPlaying ? 'Stop' : 'Test'}
                     </button>
-                    <div className="p-2 rounded-lg" style={{ color: themeStyles.accent }}>
-                      <Upload size={18} />
-                    </div>
+                  </div>
+
+                  {/* Tone Choice Buttons */}
+                  <div className="grid grid-cols-3 gap-2 pt-1">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTone('chime');
+                        if (isAudioPlaying) {
+                          stopAlarmSound();
+                        }
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-all border"
+                      style={{
+                        backgroundColor: selectedTone === 'chime' ? themeStyles.accent + '25' : 'rgba(255,255,255,0.03)',
+                        borderColor: selectedTone === 'chime' ? themeStyles.accent : 'rgba(255,255,255,0.08)',
+                        color: selectedTone === 'chime' ? themeStyles.accent : themeStyles.text + '88'
+                      }}
+                    >
+                      Chime (.wav)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setSelectedTone('synth');
+                        if (isAudioPlaying) {
+                          stopAlarmSound();
+                        }
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-all border"
+                      style={{
+                        backgroundColor: selectedTone === 'synth' ? themeStyles.accent + '25' : 'rgba(255,255,255,0.03)',
+                        borderColor: selectedTone === 'synth' ? themeStyles.accent : 'rgba(255,255,255,0.08)',
+                        color: selectedTone === 'synth' ? themeStyles.accent : themeStyles.text + '88'
+                      }}
+                    >
+                      Synth Beep
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        fileInputRef.current?.click();
+                      }}
+                      className="px-3 py-2 rounded-xl text-xs font-bold transition-all border flex items-center justify-center gap-1.5"
+                      style={{
+                        backgroundColor: selectedTone === 'custom' ? themeStyles.accent + '25' : 'rgba(255,255,255,0.03)',
+                        borderColor: selectedTone === 'custom' ? themeStyles.accent : 'rgba(255,255,255,0.08)',
+                        color: selectedTone === 'custom' ? themeStyles.accent : themeStyles.text + '88'
+                      }}
+                    >
+                      <Upload size={12} />
+                      Custom
+                    </button>
                   </div>
                 </div>
+
+                {/* Install App / PWA Button */}
+                {isInstallable && (
+                  <button 
+                    id="install-app-btn"
+                    onClick={async () => {
+                      if (deferredPrompt) {
+                        deferredPrompt.prompt();
+                        const outcome = await deferredPrompt.userChoice;
+                        if (outcome?.outcome === 'accepted') {
+                          setIsInstallable(false);
+                          setDeferredPrompt(null);
+                          addNotification(Date.now(), "App Installed", "AlarmSync added to your home screen!");
+                        }
+                      }
+                    }}
+                    className="w-full flex items-center justify-between p-5 rounded-[2rem] border border-white/5 transition-all hover:bg-white/5"
+                    style={{ backgroundColor: 'rgba(0,0,0,0.2)' }}
+                  >
+                    <div className="flex items-center gap-4">
+                      <div className="p-3 rounded-xl bg-white/5" style={{ color: themeStyles.accent }}>
+                        <Download size={20} />
+                      </div>
+                      <div className="text-left">
+                        <span className="font-bold text-sm block">Install AlarmSync</span>
+                        <span className="text-[10px] opacity-60">Add app to device home screen</span>
+                      </div>
+                    </div>
+                    <span className="text-[10px] font-black uppercase tracking-widest px-3 py-1 rounded-full bg-white/5" style={{ color: themeStyles.accent }}>
+                      Install
+                    </span>
+                  </button>
+                )}
 
                 <button 
                   onClick={() => { setShowConnectModal(true); setShowMenu(false); }}
